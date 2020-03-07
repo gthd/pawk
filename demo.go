@@ -1,11 +1,21 @@
+// Imports and globals
 package main
 
 import (
 	"fmt"
 	"os"
-	"runtime"
+	// "runtime"
 	"time"
 )
+
+const (
+	limit = 10000000000
+)
+
+type chunk struct {
+	buffsize int
+	offset int64
+}
 
 func check(e error) {
 	if e != nil {
@@ -13,46 +23,82 @@ func check(e error) {
 	}
 }
 
+// `ChannelSum()` spawns `n` goroutines that store their intermediate sums locally, then pass the result back through a channel.
 func main() {
 	start := time.Now()
-	number_of_threads := runtime.GOMAXPROCS(0)
-	var data string
-	o := int64(0)
-	bytes_to_read := 0
-	end := 0
-	f, err := os.Open("demo.txt")
+	n := 4
+  // n := runtime.GOMAXPROCS(0)
+	// A channel of ints will collect all intermediate sums.
+	res := make(chan int)
+	file, err := os.Open("demo2.txt") //open the file to process
 	check(err)
-	defer f.Close()
-	file_size, err := f.Stat()
+	defer file.Close()
+	fileinfo, err := file.Stat()
 	check(err)
-	size:= file_size.Size()
-	fmt.Printf("the file size is: %d\n", size)
-	default_size := int(size/int64(number_of_threads))
-	for thread :=0; thread < number_of_threads; thread++ {
-		if thread == number_of_threads - 1 {
-				bytes_to_read = default_size + (bytes_to_read - end) + 2
-		} else {
-			bytes_to_read = default_size + (bytes_to_read - end)
-		}
-		b := make([]byte, bytes_to_read) //the byte length that gets handled by every thread
-		n, err := f.Read(b)
-		check(err)
-		fmt.Printf("\n\n%d bytes @ %d\n", n, o)
-		for i :=bytes_to_read-1; i > 0; i-- {
-			if string(b[i]) == "\n" {
-				end = i
-				break
+	filesize := int(fileinfo.Size())
+	fmt.Println(filesize)
+	chunksizes := make([]chunk, n)
+	BufferSize := int(filesize/int(n))
+	for i := 0; i < n; i++ {
+		chunksizes[i].buffsize = BufferSize
+		chunksizes[i].offset = int64(BufferSize*i)
+	}
+	if remainder := filesize % BufferSize; remainder != 0 {
+		c := chunk{buffsize: remainder, offset: int64(n * BufferSize)}
+		n++ //then the last chunk is not processed in parallel, as the go-routines are one more than the cores available
+		chunksizes = append(chunksizes, c)
+	}
+
+	for i := 0; i < n; i++ {
+		go func(chunksizes []chunk, i int, r chan<- int) {
+			chunk := chunksizes[i]
+			buffer := make([]byte, chunk.buffsize)
+			bytesread, err := file.ReadAt(buffer, chunk.offset)
+			check(err)
+			_ = bytesread
+			fmt.Printf("\nbytestream to string: %v \n", string(buffer))
+
+			ending_offset := 0
+			for i :=chunk.buffsize-1; i > 0; i-- { //going backward on the last line to find where it starts
+				if string(buffer[i]) == "\n" {
+					ending_offset = i
+					break
+				}
 			}
-		}
-		if thread > 0 {
-			data = string(b[1:end])
-		} else {
-			data = string(b[:end])
-		}
-		fmt.Printf("%v\n", data)
-		o, err = f.Seek(o+int64(end),0)
-		check(err)
+
+			starting_offset := 0
+			for i :=0; i < chunk.buffsize; i++ { //going forward on the first line to find where it ends
+				if string(buffer[i]) == "\n" {
+					starting_offset = i
+					break
+				}
+			}
+			_ = starting_offset
+			_ = ending_offset
+
+			fmt.Printf("\nbytestream to string new: %v \n", string(buffer[starting_offset:ending_offset]))
+
+			// This local variable replaces the global slice.
+			sum := 0
+
+			//Should contain the processing that the program should do on each chunk
+
+
+			//
+
+			// Channel receives the result from processing each chunk
+			r <- sum
+			// Call the goroutine and pass the parameters of each chunk, the CPU core index and the channel that will receive the results.
+		}(chunksizes, i, res)
+	}
+
+	sum := 0
+	for i := 0; i < n; i++ {
+		// Read the value from each channel and add it to `sum`.
+		//
+		//  Synchronization of all cores through the blocking nature of channels.
+		sum += <-res
 	}
 	elapsed := time.Since(start)
-	fmt.Printf("Time it took %s", elapsed)
+	fmt.Printf("Time elapsed for channel sum %s \n", elapsed)
 }
