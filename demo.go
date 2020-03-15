@@ -1,10 +1,11 @@
-// Imports and globals
 package main
 
 import (
 	"fmt"
 	"os"
-	// "runtime"
+	"sync"
+	"strconv"
+	//"runtime"
 	"time"
 )
 
@@ -27,10 +28,11 @@ func check(e error) {
 func main() {
 	start := time.Now()
 	n := 4
-  // n := runtime.GOMAXPROCS(0)
+  //n := runtime.GOMAXPROCS(0)
 	// A channel of ints will collect all intermediate sums.
+	var sm sync.Map
 	res := make(chan int)
-	file, err := os.Open("demo2.txt") //open the file to process
+	file, err := os.Open("debug.txt") //open the file to process
 	check(err)
 	defer file.Close()
 	fileinfo, err := file.Stat()
@@ -56,12 +58,12 @@ func main() {
 			bytesread, err := file.ReadAt(buffer, chunk.offset)
 			check(err)
 			_ = bytesread
-			fmt.Printf("\nbytestream to string: %v \n", string(buffer))
+			// fmt.Printf("\nbytestream to string: %v , %d\n", string(buffer), i)
 
 			ending_offset := 0
 			for i :=chunk.buffsize-1; i > 0; i-- { //going backward on the last line to find where it starts
 				if string(buffer[i]) == "\n" {
-					ending_offset = i
+					ending_offset = i + 1
 					break
 				}
 			}
@@ -73,10 +75,17 @@ func main() {
 					break
 				}
 			}
+
 			_ = starting_offset
 			_ = ending_offset
 
-			fmt.Printf("\nbytestream to string new: %v \n", string(buffer[starting_offset:ending_offset]))
+			num := strconv.Itoa(i+1)
+			str := "start" + num
+			ending := "end" + num
+			sm.Store(str, string(buffer[:starting_offset]))
+			sm.Store(ending, string(buffer[ending_offset:]))
+
+			fmt.Printf("\nbytestream to string new: %v, %d\n", string(buffer[starting_offset:ending_offset]), i)
 
 			// This local variable replaces the global slice.
 			sum := 0
@@ -99,6 +108,17 @@ func main() {
 		//  Synchronization of all cores through the blocking nature of channels.
 		sum += <-res
 	}
+
+
+	first_line, _ := sm.Load("start"+strconv.Itoa(1))
+	fmt.Printf("line is %s \n", first_line)
+	for i := 1; i < n; i++ {
+		string_result_end , _ := sm.Load("end"+strconv.Itoa(i))
+		string_result_start , _ := sm.Load("start"+strconv.Itoa(i+1))
+		line := string_result_end.(string) + string_result_start.(string)
+		fmt.Printf("line is %s \n", line)
+	}
+
 	elapsed := time.Since(start)
-	fmt.Printf("Time elapsed for channel sum %s \n", elapsed)
+	fmt.Printf("\nTime elapsed for channel sum %s\n", elapsed)
 }
