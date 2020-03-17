@@ -5,12 +5,12 @@ import (
 	"os"
 	"sync"
 	"strconv"
-	//"runtime"
+	"runtime"
 	"time"
-)
+	"bytes"
 
-const (
-	limit = 10000000000
+  "github.com/benhoyt/goawk/parser"
+	"github.com/benhoyt/goawk/interp"
 )
 
 type chunk struct {
@@ -27,12 +27,16 @@ func check(e error) {
 // `ChannelSum()` spawns `n` goroutines that store their intermediate sums locally, then pass the result back through a channel.
 func main() {
 	start := time.Now()
-	n := 4
-  //n := runtime.GOMAXPROCS(0)
+	// n := 4
+  n := runtime.GOMAXPROCS(0)
 	// A channel of ints will collect all intermediate sums.
+	src := "$2 * $3 > 5 { emp = emp + 1 } END {print emp}"
+	prog, err := parser.ParseProgram([]byte(src), nil)
+	check(err)
+
 	var sm sync.Map
 	res := make(chan int)
-	file, err := os.Open("debug.txt") //open the file to process
+	file, err := os.Open("emp.data") //open the file to process
 	check(err)
 	defer file.Close()
 	fileinfo, err := file.Stat()
@@ -50,13 +54,15 @@ func main() {
 		n++ //then the last chunk is not processed in parallel, as the go-routines are one more than the cores available
 		chunksizes = append(chunksizes, c)
 	}
-
 	for i := 0; i < n; i++ {
 		go func(chunksizes []chunk, i int, r chan<- int) {
 			chunk := chunksizes[i]
 			buffer := make([]byte, chunk.buffsize)
 			bytesread, err := file.ReadAt(buffer, chunk.offset)
-			check(err)
+			if err != nil {
+		      fmt.Println(err)
+		      return
+		  }
 			_ = bytesread
 			// fmt.Printf("\nbytestream to string: %v , %d\n", string(buffer), i)
 
@@ -85,12 +91,23 @@ func main() {
 			sm.Store(str, string(buffer[:starting_offset]))
 			sm.Store(ending, string(buffer[ending_offset:]))
 
-			fmt.Printf("\nbytestream to string new: %v, %d\n", string(buffer[starting_offset:ending_offset]), i)
+			// fmt.Printf("\nbytestream to string new: %v, %d\n", string(buffer[starting_offset:ending_offset]), i)
+
+			config := &interp.Config{
+		      Stdin: bytes.NewReader([]byte(string(buffer[starting_offset:ending_offset]))),
+		      Vars:  []string{"OFS", ":"},
+		  }
+		  _, err = interp.ExecProgram(prog, config)
+			if err != nil {
+		      fmt.Println(err)
+		      return
+		  }
 
 			// This local variable replaces the global slice.
 			sum := 0
 
 			//Should contain the processing that the program should do on each chunk
+
 
 
 			//
@@ -108,7 +125,6 @@ func main() {
 		//  Synchronization of all cores through the blocking nature of channels.
 		sum += <-res
 	}
-
 
 	first_line, _ := sm.Load("start"+strconv.Itoa(1))
 	fmt.Printf("line is %s \n", first_line)
