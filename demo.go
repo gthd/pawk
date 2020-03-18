@@ -28,7 +28,7 @@ func check(e error) {
 func main() {
   start := time.Now()
   // n := 4
-  n := runtime.GOMAXPROCS(0)
+   n := runtime.GOMAXPROCS(0)
   // A channel of ints will collect all intermediate sums.
   src := "$2 * $3 > 5 { emp = emp + 1 } END {print emp}"
   prog, err := parser.ParseProgram([]byte(src), nil)
