@@ -20,12 +20,12 @@ before_script:
         - GO_FILES=$(find . -iname '*.go')
         - go get github.com/benhoyt/goawk
         - go get golang.org/x/lint/golint
-        - go get honnef.co/go/tools/cmd/megacheck 
+        - go get honnef.co/go/tools/cmd/staticcheck 
         - go get github.com/fzipp/gocyclo
 
 script:
         - test -z $(gofmt -s -l $GO_FILES)
-        - megacheck ./...
+        - staticcheck ./...
         - gocyclo -over 19 $GO_FILES
         - golint -set_exit_status $(go list ./...)
 
