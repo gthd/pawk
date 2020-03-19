@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"runtime"
+	// "runtime"
+	"flag"
 	"strconv"
 	"sync"
 	"time"
@@ -27,16 +28,22 @@ func check(e error) {
 // `ChannelSum()` spawns `n` goroutines that store their intermediate sums locally, then pass the result back through a channel.
 func main() {
 	start := time.Now()
+	flag.Parse()
+	arg2 := flag.Arg(2)
+	n, err := strconv.Atoi(arg2)
+	check(err)
 	// n := 4
-	n := runtime.GOMAXPROCS(0)
+	// n := runtime.GOMAXPROCS(0)
 	// A channel of ints will collect all intermediate sums.
-	src := "$2 * $3 > 5 { emp = emp + 1 } END {print emp}"
-	prog, err := parser.ParseProgram([]byte(src), nil)
+	arg1 := flag.Arg(0)
+	// src := "$2 * $3 > 5 { emp = emp + 1 } END {print emp}"
+	prog, err := parser.ParseProgram([]byte(arg1), nil)
 	check(err)
 
 	var sm sync.Map
 	res := make(chan int)
-	file, err := os.Open("emp.data") //open the file to process
+	arg0 := flag.Arg(1)
+	file, err := os.Open(arg0) //open the file to process
 	check(err)
 	defer file.Close()
 	fileinfo, err := file.Stat()
