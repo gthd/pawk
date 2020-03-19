@@ -28,7 +28,7 @@ func check(e error) {
 func main() {
   start := time.Now()
   // n := 4
-   n := runtime.GOMAXPROCS(0)
+  n := runtime.GOMAXPROCS(0)
   // A channel of ints will collect all intermediate sums.
   src := "$2 * $3 > 5 { emp = emp + 1 } END {print emp}"
   prog, err := parser.ParseProgram([]byte(src), nil)
@@ -66,35 +66,35 @@ func main() {
       _ = bytesread
       // fmt.Printf("\nbytestream to string: %v , %d\n", string(buffer), i)
 
-      ending_offset := 0
+      endingOffset := 0
       for i :=chunk.buffsize-1; i > 0; i-- { //going backward on the last line to find where it starts
         if string(buffer[i]) == "\n" {
-          ending_offset = i + 1
+          endingOffset = i + 1
           break
         }
       }
 
-      starting_offset := 0
+      startingOffset := 0
       for i :=0; i < chunk.buffsize; i++ { //going forward on the first line to find where it ends
         if string(buffer[i]) == "\n" {
-          starting_offset = i
+          startingOffset = i
           break
         }
       }
 
-      _ = starting_offset
-      _ = ending_offset
+      _ = startingOffset
+      _ = endingOffset
 
       num := strconv.Itoa(i+1)
       str := "start" + num
       ending := "end" + num
-      sm.Store(str, string(buffer[:starting_offset]))
-      sm.Store(ending, string(buffer[ending_offset:]))
+      sm.Store(str, string(buffer[:startingOffset]))
+      sm.Store(ending, string(buffer[endingOffset:]))
 
-      // fmt.Printf("\nbytestream to string new: %v, %d\n", string(buffer[starting_offset:ending_offset]), i)
+      // fmt.Printf("\nbytestream to string new: %v, %d\n", string(buffer[startingOffset:endingOffset]), i)
 
       config := &interp.Config{
-          Stdin: bytes.NewReader([]byte(string(buffer[starting_offset:ending_offset]))),
+          Stdin: bytes.NewReader([]byte(string(buffer[startingOffset:endingOffset]))),
           Vars:  []string{"OFS", ":"},
       }
       _, err = interp.ExecProgram(prog, config)
@@ -126,12 +126,12 @@ func main() {
     sum += <-res
   }
 
-  first_line, _ := sm.Load("start"+strconv.Itoa(1))
-  fmt.Printf("line is %s \n", first_line)
+  firstLine, _ := sm.Load("start"+strconv.Itoa(1))
+  fmt.Printf("line is %s \n", firstLine)
   for i := 1; i < n; i++ {
-    string_result_end , _ := sm.Load("end"+strconv.Itoa(i))
-    string_result_start , _ := sm.Load("start"+strconv.Itoa(i+1))
-    line := string_result_end.(string) + string_result_start.(string)
+    stringResultEnd , _ := sm.Load("end"+strconv.Itoa(i))
+    stringResultStart , _ := sm.Load("start"+strconv.Itoa(i+1))
+    line := stringResultEnd.(string) + stringResultStart.(string)
     fmt.Printf("line is %s \n", line)
   }
 
