@@ -19,7 +19,7 @@ if: branch = dev
 before_script:
         - GO_FILES=$(find . -iname '*.go')
         - go get github.com/benhoyt/goawk
-        - go get github.com/golang/lint/golint
+        - go get golang.org/x/lint/golint
         - go get honnef.co/go/tools/cmd/megacheck 
         - go get github.com/fzipp/gocyclo
 
