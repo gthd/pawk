@@ -1,0 +1,19 @@
+dist: bionic
+
+arch: amd64
+
+language: go
+
+go: tip
+
+go_import_path: github.com/benhoyt/goawk
+
+git:
+  strategy: clone
+  depth: 1
+  quiet: true
+
+notifications:
+  email: gtheodorou035@gmail.com
+
+if: branch = dev
