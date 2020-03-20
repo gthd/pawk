@@ -1,0 +1,1 @@
+$2 * $3 > 5 { emp = emp + 1 } END {print emp}
