@@ -18,9 +18,9 @@ if: branch = dev
 
 before_script:
         - GO_FILES=$(find . -iname '*.go')
-        - go get github.com/benhoyt/goawk
+        - go get github.com/gthd/goawk
         - go get golang.org/x/lint/golint
-        - go get honnef.co/go/tools/cmd/staticcheck 
+        - go get honnef.co/go/tools/cmd/staticcheck
         - go get github.com/fzipp/gocyclo
 
 script:
@@ -28,4 +28,3 @@ script:
         - staticcheck ./...
         #- gocyclo -over 19 $GO_FILES
         - golint -set_exit_status $(go list ./...)
-
