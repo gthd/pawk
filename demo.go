@@ -25,31 +25,30 @@ func check(e error) {
 	}
 }
 
-// `ChannelSum()` spawns `n` goroutines that store their intermediate sums locally, then pass the result back through a channel.
-func main() {
-	start := time.Now()
+func receiveArguments() (string, string, int) {
 	flag.Parse()
-	arg2 := flag.Arg(2)
-	n, err := strconv.Atoi(arg2)
+	argument0 := flag.Arg(0)
+	argument1 := flag.Arg(1)
+	argument2 := flag.Arg(2)
+	numberOfThreads, err := strconv.Atoi(argument2)
 	check(err)
-	// n := 4
-	// n := runtime.GOMAXPROCS(0)
-	// A channel of ints will collect all intermediate sums.
-	arg1 := flag.Arg(0)
-	// src := "$2 * $3 > 5 { emp = emp + 1 } END {print emp}"
-	prog, err := parser.ParseProgram([]byte(arg1), nil)
-	check(err)
+	return argument0, argument1, numberOfThreads
+}
 
-	var sm sync.Map
-	res := make(chan int)
-	arg0 := flag.Arg(1)
-	file, err := os.Open(arg0) //open the file to process
+func openFile(f string) *os.File {
+	file, err := os.Open(f) //open the file to process
 	check(err)
-	defer file.Close()
+	return file
+}
+
+func getSize(file *os.File) int {
 	fileinfo, err := file.Stat()
 	check(err)
 	filesize := int(fileinfo.Size())
-	fmt.Println(filesize)
+	return filesize
+}
+
+func divideFile(filesize int, n int) (int, []chunk) {
 	chunksizes := make([]chunk, n)
 	BufferSize := int(filesize / int(n))
 	for i := 0; i < n; i++ {
@@ -61,37 +60,85 @@ func main() {
 		n++ //then the last chunk is not processed in parallel, as the go-routines are one more than the cores available
 		chunksizes = append(chunksizes, c)
 	}
+	return n, chunksizes
+}
+
+// func readFile(chunksize []chunk, buffsize int, file *os.File) ([]byte){
+// 	chunk := chunksize
+// 	buffer := make([]byte, buffsize)
+// 	_, err := file.ReadAt(buffer, chunk.offset)
+// 	check(err)
+// 	return buffer
+// }
+
+func endOffset(buffsize int, buffer []byte) int {
+	endingOffset := 0
+	for j := buffsize - 1; j > 0; j-- { //going backward on the last line to find where it starts
+		if string(buffer[j]) == "\n" {
+			endingOffset = j + 1
+			break
+		}
+	}
+	return endingOffset
+}
+
+func startOffset(buffsize int, buffer []byte) int {
+	startingOffset := 0
+	for k := 0; k < buffsize; k++ { //going forward on the first line to find where it ends
+		if string(buffer[k]) == "\n" {
+			startingOffset = k
+			break
+		}
+	}
+	return startingOffset
+}
+
+func stichLines(sm sync.Map, n int) {
+	firstLine, _ := sm.Load("start" + strconv.Itoa(1))
+	fmt.Printf("line is %s \n", firstLine)
+	for i := 1; i < n; i++ {
+		stringResultEnd, _ := sm.Load("end" + strconv.Itoa(i))
+		stringResultStart, _ := sm.Load("start" + strconv.Itoa(i+1))
+		line := stringResultEnd.(string) + stringResultStart.(string)
+		fmt.Printf("line is %s \n", line)
+	}
+}
+
+func goAwk(buffer []byte, startingOffset int, endingOffset int, prog *parser.Program) {
+	config := &interp.Config{
+		Stdin: bytes.NewReader([]byte(string(buffer[startingOffset:endingOffset]))),
+		Vars:  []string{"OFS", ":"},
+	}
+	_, err := interp.ExecProgram(prog, config)
+	check(err)
+}
+
+// `ChannelSum()` spawns `n` goroutines that store their intermediate sums locally, then pass the result back through a channel.
+func main() {
+	start := time.Now()
+	arg0, arg1, n := receiveArguments()
+	// n := runtime.GOMAXPROCS(0)
+	// src := "$2 * $3 > 5 { emp = emp + 1 } END {print emp}"
+	prog, err := parser.ParseProgram([]byte(arg0), nil)
+	check(err)
+	var sm sync.Map
+	res := make(chan int)
+	file := openFile(arg1)
+	defer file.Close()
+	filesize := getSize(file)
+	n, chunksizes := divideFile(filesize, n)
+
 	for i := 0; i < n; i++ {
 		go func(chunksizes []chunk, i int, r chan<- int) {
 			chunk := chunksizes[i]
 			buffer := make([]byte, chunk.buffsize)
-			bytesread, err := file.ReadAt(buffer, chunk.offset)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			_ = bytesread
-			// fmt.Printf("\nbytestream to string: %v , %d\n", string(buffer), i)
+			_, err := file.ReadAt(buffer, chunk.offset)
+			check(err)
 
-			endingOffset := 0
-			for i := chunk.buffsize - 1; i > 0; i-- { //going backward on the last line to find where it starts
-				if string(buffer[i]) == "\n" {
-					endingOffset = i + 1
-					break
-				}
-			}
+			endingOffset := endOffset(chunk.buffsize, buffer)
+			startingOffset := startOffset(chunk.buffsize, buffer)
 
-			startingOffset := 0
-			for i := 0; i < chunk.buffsize; i++ { //going forward on the first line to find where it ends
-				if string(buffer[i]) == "\n" {
-					startingOffset = i
-					break
-				}
-			}
-
-			_ = startingOffset
-			_ = endingOffset
-
+			// Have to change
 			num := strconv.Itoa(i + 1)
 			str := "start" + num
 			ending := "end" + num
@@ -99,16 +146,7 @@ func main() {
 			sm.Store(ending, string(buffer[endingOffset:]))
 
 			// fmt.Printf("\nbytestream to string new: %v, %d\n", string(buffer[startingOffset:endingOffset]), i)
-
-			config := &interp.Config{
-				Stdin: bytes.NewReader([]byte(string(buffer[startingOffset:endingOffset]))),
-				Vars:  []string{"OFS", ":"},
-			}
-			_, err = interp.ExecProgram(prog, config)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
+			goAwk(buffer, startingOffset, endingOffset, prog)
 
 			// This local variable replaces the global slice.
 			sum := 0
@@ -131,14 +169,7 @@ func main() {
 		sum += <-res
 	}
 
-	firstLine, _ := sm.Load("start" + strconv.Itoa(1))
-	fmt.Printf("line is %s \n", firstLine)
-	for i := 1; i < n; i++ {
-		stringResultEnd, _ := sm.Load("end" + strconv.Itoa(i))
-		stringResultStart, _ := sm.Load("start" + strconv.Itoa(i+1))
-		line := stringResultEnd.(string) + stringResultStart.(string)
-		fmt.Printf("line is %s \n", line)
-	}
+	stichLines(sm, n)
 
 	elapsed := time.Since(start)
 	fmt.Printf("\nTime elapsed for channel sum %s\n", elapsed)
