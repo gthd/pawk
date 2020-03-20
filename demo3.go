@@ -3,6 +3,7 @@ package main
 import (
   "os"
   "fmt"
+  "strconv"
   // "github.com/gthd/goawk/interp"
 	"github.com/gthd/goawk/parser"
 )
@@ -14,6 +15,11 @@ func check(e error) {
 }
 
 func main() {
+  test := ""
+  b, err := strconv.ParseBool(test)
+  if !b {
+    fmt.Println("an empty string is false")
+  }
   file, err := os.Open("demo5.txt") //open the file to process
   check(err)
   fileinfo, err := file.Stat()

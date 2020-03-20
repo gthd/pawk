@@ -1,1 +1,14 @@
-$2 * $3 > 5 { emp = emp + 1 } END {print emp}
+{ for (i=1; i <= NF; i++)
+  sum[i] += $i
+  if (NF > maxfld)
+    maxfld = NF
+}
+
+END { for (i=1; i<= maxfld; i++) {
+  printf("%g", sum[i])
+  if (i < maxfld)
+    printf("\t")
+  else
+    printf("\n")
+  }
+}

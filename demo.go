@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	// "runtime"
-	"flag"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -25,14 +24,60 @@ func check(e error) {
 	}
 }
 
-func receiveArguments() (string, string, int) {
-	flag.Parse()
-	argument0 := flag.Arg(0)
-	argument1 := flag.Arg(1)
-	argument2 := flag.Arg(2)
-	numberOfThreads, err := strconv.Atoi(argument2)
-	check(err)
-	return argument0, argument1, numberOfThreads
+func receiveArguments() (string, int, string, bool) {
+	numberOfThreads := runtime.GOMAXPROCS(0)
+	if len(os.Args) > 1 {
+		argument0 := os.Args[1]
+		receivedFile := true
+		if (argument0 == "-f") { //then the awk command is inside a file so that we read the file name as an argument
+			argument1 := os.Args[2]
+			if (argument1 == "-n") {
+				argument2 := os.Args[3] //awk command file
+				argument3 := os.Args[4] // file to process
+				return argument2, numberOfThreads, argument3, receivedFile
+			} else {
+				argument2 := os.Args[3] //threads
+				numberOfThreads, err := strconv.Atoi(argument2)
+				check(err)
+				argument3 := os.Args[4] // file to process
+				return argument1, numberOfThreads, argument3, receivedFile
+			}
+
+		} else {
+			receivedFile = false
+			if (argument0 == "-n") {
+				argument1 := os.Args[2] // awk command
+				argument2 := os.Args[3] // file to process
+				return argument1, numberOfThreads, argument2, receivedFile
+			} else {
+				argument1 := os.Args[2] // threads
+				numberOfThreads, err := strconv.Atoi(argument1)
+				check(err)
+				argument2 := os.Args[3] // file to process
+				return argument0, numberOfThreads, argument2, receivedFile
+			}
+		}
+	} else {
+		panic("Did not receive any arguments")
+	}
+}
+
+func getCommand(receivedFile bool, commandFile string) (string){
+	command := ""
+	if receivedFile {
+		f, err := os.Open(commandFile) //open the file to process
+	  check(err)
+	  finfo, err := f.Stat()
+		check(err)
+		fsize := int(finfo.Size())
+		buf := make([]byte, fsize)
+	  bytesContained, err := f.Read(buf)
+	  check(err)
+	  command = string(buf[:bytesContained])
+	} else {
+		command = commandFile
+	}
+	return command
 }
 
 func openFile(f string) *os.File {
@@ -116,10 +161,11 @@ func goAwk(buffer []byte, startingOffset int, endingOffset int, prog *parser.Pro
 // `ChannelSum()` spawns `n` goroutines that store their intermediate sums locally, then pass the result back through a channel.
 func main() {
 	start := time.Now()
-	arg0, arg1, n := receiveArguments()
+	arg0, n, arg1, commandInFile := receiveArguments()
+	awkCommand := getCommand(commandInFile, arg0)
 	// n := runtime.GOMAXPROCS(0)
 	// src := "$2 * $3 > 5 { emp = emp + 1 } END {print emp}"
-	prog, err, varTypes := parser.ParseProgram([]byte(arg0), nil)
+	prog, err, varTypes := parser.ParseProgram([]byte(awkCommand), nil)
 	fmt.Println(prog)
 	fmt.Println(varTypes)
 	check(err)
