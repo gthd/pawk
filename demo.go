@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
-	"reflect"
 	"fmt"
 	"os"
+	"reflect"
 	"runtime"
 	"strconv"
 	"sync"
