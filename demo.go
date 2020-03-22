@@ -168,7 +168,7 @@ func main() {
 	check(err)
 
 	fmt.Println(prog)
-	
+
 	if len(varTypes) > 1 {
 		panic("Cannot handle awk command that contains local variables")
 	}
