@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	// "reflect"
 	"fmt"
 	"os"
 	"runtime"
@@ -164,9 +165,14 @@ func main() {
 	// n := runtime.GOMAXPROCS(0)
 	// src := "$2 * $3 > 5 { emp = emp + 1 } END {print emp}"
 	prog, err, varTypes := parser.ParseProgram([]byte(awkCommand), nil)
-	fmt.Println(prog)
-	fmt.Println(varTypes)
 	check(err)
+
+	fmt.Println(prog)
+	
+	if len(varTypes) > 1 {
+		panic("Cannot handle awk command that contains local variables")
+	}
+
 	var sm sync.Map
 	res := make(chan int)
 	file := openFile(arg1)
