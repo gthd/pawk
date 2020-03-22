@@ -38,12 +38,11 @@ func receiveArguments() (string, int, string, bool) {
 				argument2 := os.Args[3] //awk command file
 				argument3 := os.Args[4] // file to process
 				return argument2, numberOfThreads, argument3, receivedFile
-			} else {
-				argument2 := os.Args[3] //threads
-				numberOfThreads, err := strconv.Atoi(argument2)
-				check(err)
-				argument3 := os.Args[4] // file to process
-				return argument1, numberOfThreads, argument3, receivedFile
+			argument2 := os.Args[3] //threads
+			numberOfThreads, err := strconv.Atoi(argument2)
+			check(err)
+			argument3 := os.Args[4] // file to process
+			return argument1, numberOfThreads, argument3, receivedFile
 			}
 
 		} else {
@@ -52,12 +51,11 @@ func receiveArguments() (string, int, string, bool) {
 				argument1 := os.Args[2] // awk command
 				argument2 := os.Args[3] // file to process
 				return argument1, numberOfThreads, argument2, receivedFile
-			} else {
-				argument1 := os.Args[2] // threads
-				numberOfThreads, err := strconv.Atoi(argument1)
-				check(err)
-				argument2 := os.Args[3] // file to process
-				return argument0, numberOfThreads, argument2, receivedFile
+			argument1 := os.Args[2] // threads
+			numberOfThreads, err := strconv.Atoi(argument1)
+			check(err)
+			argument2 := os.Args[3] // file to process
+			return argument0, numberOfThreads, argument2, receivedFile
 			}
 		}
 	} else {
