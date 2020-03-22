@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	// "reflect"
+	"reflect"
 	"fmt"
 	"os"
 	"runtime"
@@ -59,9 +59,8 @@ func receiveArguments() (string, int, string, bool) {
 		argument2 := os.Args[3] // file to process
 		return argument0, numberOfThreads, argument2, receivedFile
 
-	} else {
-		panic("Did not receive any arguments")
 	}
+	panic("Did not receive any arguments")
 }
 
 func getCommand(receivedFile bool, commandFile string) string {
@@ -167,7 +166,7 @@ func main() {
 	prog, err, varTypes := parser.ParseProgram([]byte(awkCommand), nil)
 	check(err)
 
-	fmt.Println(prog)
+	fmt.Println(reflect.TypeOf(prog))
 
 	if len(varTypes) > 1 {
 		panic("Cannot handle awk command that contains local variables")
