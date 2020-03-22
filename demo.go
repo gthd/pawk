@@ -32,31 +32,31 @@ func receiveArguments() (string, int, string, bool) {
 	if len(os.Args) > 1 {
 		argument0 := os.Args[1]
 		receivedFile := true
-		if (argument0 == "-f") { //then the awk command is inside a file so that we read the file name as an argument
+		if argument0 == "-f" { //then the awk command is inside a file so that we read the file name as an argument
 			argument1 := os.Args[2]
-			if (argument1 == "-n") {
+			if argument1 == "-n" {
 				argument2 := os.Args[3] //awk command file
 				argument3 := os.Args[4] // file to process
 				return argument2, numberOfThreads, argument3, receivedFile
 			}
+
 			argument2 := os.Args[3] //threads
 			numberOfThreads, err := strconv.Atoi(argument2)
 			check(err)
 			argument3 := os.Args[4] // file to process
 			return argument1, numberOfThreads, argument3, receivedFile
-		} else {
-			receivedFile = false
-			if (argument0 == "-n") {
-				argument1 := os.Args[2] // awk command
-				argument2 := os.Args[3] // file to process
-				return argument1, numberOfThreads, argument2, receivedFile
-			}
-			argument1 := os.Args[2] // threads
-			numberOfThreads, err := strconv.Atoi(argument1)
-			check(err)
+		}
+		receivedFile = false
+		if argument0 == "-n" {
+			argument1 := os.Args[2] // awk command
 			argument2 := os.Args[3] // file to process
-			return argument0, numberOfThreads, argument2, receivedFile
-			}
+			return argument1, numberOfThreads, argument2, receivedFile
+		}
+		argument1 := os.Args[2] // threads
+		numberOfThreads, err := strconv.Atoi(argument1)
+		check(err)
+		argument2 := os.Args[3] // file to process
+		return argument0, numberOfThreads, argument2, receivedFile
 
 	} else {
 		panic("Did not receive any arguments")
