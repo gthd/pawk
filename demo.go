@@ -68,7 +68,7 @@ func receiveArguments() (string, int, string, bool) {
 func getCommand(receivedFile bool, commandFile string) string {
 	command := ""
 	if receivedFile {
-		f, err := os.Open(commandFile) //open the file to process
+		f, err := os.Open(commandFile) //open the file to process it
 		check(err)
 		finfo, err := f.Stat()
 		check(err)
