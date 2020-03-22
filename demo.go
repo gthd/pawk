@@ -8,6 +8,9 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	// "net/http"
+	// _ "net/http/pprof"
+	// "log"
 
 	"github.com/gthd/goawk/interp"
 	"github.com/gthd/goawk/parser"
@@ -29,9 +32,9 @@ func receiveArguments() (string, int, string, bool) {
 	if len(os.Args) > 1 {
 		argument0 := os.Args[1]
 		receivedFile := true
-		if (argument0 == "-f") { //then the awk command is inside a file so that we read the file name as an argument
+		if argument0 == "-f" { //then the awk command is inside a file so that we read the file name as an argument
 			argument1 := os.Args[2]
-			if (argument1 == "-n") {
+			if argument1 == "-n" {
 				argument2 := os.Args[3] //awk command file
 				argument3 := os.Args[4] // file to process
 				return argument2, numberOfThreads, argument3, receivedFile
@@ -45,7 +48,7 @@ func receiveArguments() (string, int, string, bool) {
 
 		} else {
 			receivedFile = false
-			if (argument0 == "-n") {
+			if argument0 == "-n" {
 				argument1 := os.Args[2] // awk command
 				argument2 := os.Args[3] // file to process
 				return argument1, numberOfThreads, argument2, receivedFile
@@ -62,18 +65,18 @@ func receiveArguments() (string, int, string, bool) {
 	}
 }
 
-func getCommand(receivedFile bool, commandFile string) (string){
+func getCommand(receivedFile bool, commandFile string) string {
 	command := ""
 	if receivedFile {
 		f, err := os.Open(commandFile) //open the file to process
-	  check(err)
-	  finfo, err := f.Stat()
+		check(err)
+		finfo, err := f.Stat()
 		check(err)
 		fsize := int(finfo.Size())
 		buf := make([]byte, fsize)
-	  bytesContained, err := f.Read(buf)
-	  check(err)
-	  command = string(buf[:bytesContained])
+		bytesContained, err := f.Read(buf)
+		check(err)
+		command = string(buf[:bytesContained])
 	} else {
 		command = commandFile
 	}
@@ -107,14 +110,6 @@ func divideFile(filesize int, n int) (int, []chunk) {
 	}
 	return n, chunksizes
 }
-
-// func readFile(chunksize []chunk, buffsize int, file *os.File) ([]byte){
-// 	chunk := chunksize
-// 	buffer := make([]byte, buffsize)
-// 	_, err := file.ReadAt(buffer, chunk.offset)
-// 	check(err)
-// 	return buffer
-// }
 
 func endOffset(buffsize int, buffer []byte) int {
 	endingOffset := 0
@@ -160,6 +155,11 @@ func goAwk(buffer []byte, startingOffset int, endingOffset int, prog *parser.Pro
 
 // `ChannelSum()` spawns `n` goroutines that store their intermediate sums locally, then pass the result back through a channel.
 func main() {
+
+	// go func() {
+	// log.Println(http.ListenAndServe("localhost:6060", nil))
+	// }()
+
 	start := time.Now()
 	arg0, n, arg1, commandInFile := receiveArguments()
 	awkCommand := getCommand(commandInFile, arg0)
