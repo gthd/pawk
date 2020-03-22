@@ -95,24 +95,24 @@ func divideFile(file *os.File, n int) []chunk {
 	chunk := make([]chunk, n)
 	var data string
 	o := int64(0)
-	bytes_to_read := 0
+	bytesToRead := 0
 	end := 0
 	filesize := getSize(file)
-	default_size := int(filesize / int(n))
+	defaultSize := int(filesize / int(n))
 	for thread := 0; thread < n; thread++ {
 		if thread == n-1 {
-			bytes_to_read = default_size + (bytes_to_read - end) + 2
+			bytesToRead = defaultSize + (bytesToRead - end) + 2
 		} else {
-			bytes_to_read = default_size + (bytes_to_read - end)
+			bytesToRead = defaultSize + (bytesToRead - end)
 		}
-		b := make([]byte, bytes_to_read) //the byte length that gets handled by every thread
+		b := make([]byte, bytesToRead) //the byte length that gets handled by every thread
 		textBytes, err := file.Read(b)
 		check(err)
 		_ = textBytes
 		_ = o
 		// fmt.Printf("\n\n%d bytes @ %d\n", textBytes, o)
 
-		for i := bytes_to_read - 1; i > 0; i-- {
+		for i := bytesToRead - 1; i > 0; i-- {
 			if string(b[i]) == "\n" {
 				end = i
 				break
