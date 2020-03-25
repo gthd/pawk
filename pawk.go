@@ -21,9 +21,6 @@ import (
 	"runtime"
 	"strconv"
 	"time"
-	// "net/http"
-	// _ "net/http/pprof"
-	// "log"
 
 	"github.com/gthd/goawk/interp"
 	"github.com/gthd/goawk/parser"
@@ -51,7 +48,6 @@ func receiveArguments() (string, int, string, bool) {
 				argument3 := os.Args[4] // file to process
 				return argument2, numberOfThreads, argument3, receivedFile
 			}
-
 			argument2 := os.Args[3] //threads
 			numberOfThreads, err := strconv.Atoi(argument2)
 			check(err)
@@ -69,7 +65,6 @@ func receiveArguments() (string, int, string, bool) {
 		check(err)
 		argument2 := os.Args[3] // file to process
 		return argument0, numberOfThreads, argument2, receivedFile
-
 	}
 	panic("Did not receive any arguments")
 }
@@ -124,15 +119,12 @@ func divideFile(file *os.File, n int) []chunk {
 		check(err)
 		_ = textBytes
 		_ = o
-		// fmt.Printf("\n\n%d bytes @ %d\n", textBytes, o)
-
 		for i := bytesToRead - 1; i > 0; i-- {
 			if string(b[i]) == "\n" {
 				end = i
 				break
 			}
 		}
-
 		if thread > 0 {
 			chunk[thread].buff = b[1:end]
 			data = string(b[1:end])
@@ -156,56 +148,31 @@ func goAwk(chunk []byte, prog *parser.Program) {
 	check(err)
 }
 
-// `ChannelSum()` spawns `n` goroutines that store their intermediate sums locally, then pass the result back through a channel.
 func main() {
-
-	// go func() {
-	// log.Println(http.ListenAndServe("localhost:6060", nil))
-	// }()
 	start := time.Now()
 	arg0, n, arg1, commandInFile := receiveArguments()
 	awkCommand := getCommand(commandInFile, arg0)
 	res := make(chan int)
-	// n := runtime.GOMAXPROCS(0)
-	// src := "$2 * $3 > 5 { emp = emp + 1 } END {print emp}"
 	prog, err, varTypes := parser.ParseProgram([]byte(awkCommand), nil)
 	check(err)
-
 	if len(varTypes) > 1 {
 		panic("Cannot handle awk command that contains local variables")
 	}
-
 	file := openFile(arg1)
 	defer file.Close()
 	chunks := divideFile(file, n)
-
 	for i := 0; i < n; i++ {
 		go func(chunks []chunk, i int, r chan<- int) {
 			chunk := chunks[i]
-
 			goAwk(chunk.buff, prog)
-
-			// This local variable replaces the global slice.
 			sum := 0
-
-			//Should contain the processing that the program should do on each chunk
-
-			//
-
-			// Channel receives the result from processing each chunk
 			r <- sum
-			// Call the goroutine and pass the parameters of each chunk, the CPU core index and the channel that will receive the results.
 		}(chunks, i, res)
 	}
-
 	sum := 0
 	for i := 0; i < n; i++ {
-		// Read the value from each channel and add it to `sum`.
-		//
-		//  Synchronization of all cores through the blocking nature of channels.
 		sum += <-res
 	}
-
 	elapsed := time.Since(start)
 	fmt.Printf("\nTime elapsed %s\n", elapsed)
 }

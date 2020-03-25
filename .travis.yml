@@ -19,5 +19,5 @@ before_script:
 script:
         - test -z $(gofmt -s -l $GO_FILES)
         - staticcheck ./...
-        #- gocyclo -over 19 $GO_FILES
+        - gocyclo -over 40 $GO_FILES
         - golint -set_exit_status $(go list ./...)
