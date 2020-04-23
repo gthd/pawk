@@ -10,6 +10,7 @@ To be able to contribute to the repository, you need to first install and
 configure GO. To do so [download GO](https://golang.org/doc/install):
 
   ```
+    cd ~/Downloads/
     sudo mv go1.14.2.linux-amd64.tar.gz /usr/local/
     sudo tar -xzf go1.14.2.linux-amd64.tar.gz
     vi /home/user_name/.profile
