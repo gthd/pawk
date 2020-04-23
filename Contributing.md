@@ -4,6 +4,28 @@ When contributing to this repository, please first discuss the change you wish t
 
 Please adhere to the following project interaction guidelines.
 
+##Configure Environment
+
+To be able to contribute to the repository, you need to first install and
+configure GO. To do so [download GO](https://golang.org/doc/install):
+
+  ```
+    sudo mv go1.14.2.linux-amd64.tar.gz /usr/local/
+    sudo tar -xzf go1.14.2.linux-amd64.tar.gz
+    vi /home/user_name/.profile
+    export PATH=$PATH:/usr/local/go/bin
+    source /home/user_name/.profile
+  ```  
+
+Above instructions assume that Ubuntu with x86_64 architecture is being used.
+
+After having successfully configured GO, you have to install the project's
+dependencies. Therefore run:
+
+  ```
+    go get github.com/gthd/goawk
+  ```
+
 ## Code of Conduct
 
 ### Our Pledge
