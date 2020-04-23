@@ -4,7 +4,7 @@ When contributing to this repository, please first discuss the change you wish t
 
 Please adhere to the following project interaction guidelines.
 
-##Configure Environment
+## Configure Environment
 
 To be able to contribute to the repository, you need to first install and
 configure GO. To do so [download GO](https://golang.org/doc/install):
