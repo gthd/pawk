@@ -129,7 +129,6 @@ func divideFile(file *os.File, n int) []chunk {
 			data = string(b[:end])
 		}
 		_ = data
-		fmt.Printf("\n The thread is %d and the content is %s \n", thread, data)
 		o, err = file.Seek(o+int64(end), 0)
 		check(err)
 	}
