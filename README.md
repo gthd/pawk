@@ -24,28 +24,42 @@ that there is a selected number of AWK operations that can be run in parallel.
 
 ## Demo
 
+The first line works under linux_amd64 and the second line under windows_amd64.
+
 To execute Pawk one does not need to install its dependencies, since an executable
 is included in the repository. There are four options to execute Pawk.
 
 1. If the command to run exists in the file `awk_command.txt` and the user does
   not specify the number of threads that are going to be used:
 
-    `./pawk -f -n awk_command.txt data.txt`
+    ```
+    ./pawk -f -n awk_command.txt data.txt
+    ./pawk.exe -f -n awk_command.txt data.txt
+    ```
 
 2. If the command to run exists in the file `awk_command.txt` and the user does
   specify the number of threads, 7 in this example, that are going to be used:
 
-    `./pawk -f awk_command.txt 7 data.txt`
+    ```
+    ./pawk -f awk_command.txt 7 data.txt
+    ./pawk.exe -f awk_command.txt 7 data.txt
+    ```
 
 3. If the command to run is given in the terminal and the user does not specify
   the number of threads that are going to be used:
 
-    `./pawk -n '$2*$3 > 5 { emp = emp + 1 } END {print emp}' data.txt`
+    ```
+    ./pawk -n '$2*$3 > 5 { emp = emp + 1 } END {print emp}' data.txt
+    ./pawk.exe -n '$2*$3 > 5 { emp = emp + 1 } END {print emp}' data.txt
+    ```
 
 4. If the command to run is given in the terminal and the user does specify
   the number of threads, 7 in this example, that are going to be used:
 
-    `./pawk '$2*$3 > 5 { emp = emp + 1 } END {print emp}' 7 data.txt`
+    ```
+    ./pawk '$2*$3 > 5 { emp = emp + 1 } END {print emp}' 7 data.txt
+    ./pawk.exe '$2*$3 > 5 { emp = emp + 1 } END {print emp}' 7 data.txt
+    ```
 
 ## Contributing
 
