@@ -110,7 +110,7 @@ func divideFile(file *os.File, n int) []chunk {
 	defaultSize := int(filesize / int(n))
 	for thread := 0; thread < n; thread++ {
 		bytesToRead = defaultSize + (bytesToRead - end) + 1 //In this way we check that the chunk does not end just before new line
-		b := make([]byte, bytesToRead) //the byte length that gets handled by every thread
+		b := make([]byte, bytesToRead)                      //the byte length that gets handled by every thread
 		textBytes, err := file.Read(b)
 		check(err)
 		_ = textBytes
