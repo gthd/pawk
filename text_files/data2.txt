@@ -1,0 +1,16 @@
+name surname salary job age
+George Theodorou 100 developer 23
+Nikos Kapetanos 200 shipping 27
+Manos Xrysos 150 mining 35
+Ioannis Psaraftis 50 fishing 24
+George Theodorou 100 developer 23
+George Theodorou 100 developer 23
+Nikos Kapetanos 200 shipping 27
+Manos Xrysos 150 mining 35
+Ioannis Psaraftis 50 fishing 24
+George Theodorou 100 developer 23
+George Theodorou 100 developer 23
+Nikos Kapetanos 200 shipping 27
+Manos Xrysos 150 mining 35
+Ioannis Psaraftis 50 fishing 24
+George Theodorou 100 developer 23
