@@ -38,7 +38,7 @@ is included in the repository. There are four options to execute Pawk.
     ```
 
 2. If the command to run exists in the file `awk_command.txt` and the user does
-  specify the number of threads, 7 in this example, that are going to be used:
+  specify the number of threads, 7 in this example, that are going to be used :
 
     ```
     ./pawk -f awk_command.txt 7 data.txt
