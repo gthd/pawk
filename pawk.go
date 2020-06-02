@@ -135,40 +135,43 @@ func divideFile(file *os.File, n int) []chunk {
 	return chunk
 }
 
-func goAwk(chunk []byte, prog *parser.Program) {
+func goAwk(chunk []byte, prog *parser.Program) float64 {
 	config := &interp.Config{
 		Stdin: bytes.NewReader(chunk),
 		Vars:  []string{"OFS", ":"},
 	}
-	_, err := interp.ExecProgram(prog, config)
+	_, err, res := interp.ExecProgram(prog, config)
 	check(err)
+	return res
 }
 
 func main() {
 	start := time.Now()
 	arg0, n, arg1, commandInFile := receiveArguments()
 	awkCommand := getCommand(commandInFile, arg0)
-	res := make(chan int)
+	res := make(chan float64)
 	prog, err, varTypes := parser.ParseProgram([]byte(awkCommand), nil)
 	check(err)
 	if len(varTypes) > 1 {
 		panic("Cannot handle awk command that contains local variables")
 	}
+	// _, action := prog.String()
+	// fmt.Printf("%s", action) need to use regex to get the action
 	file := openFile(arg1)
 	defer file.Close()
 	chunks := divideFile(file, n)
 	for i := 0; i < n; i++ {
-		go func(chunks []chunk, i int, r chan<- int) {
+		go func(chunks []chunk, i int, r chan<- float64) {
 			chunk := chunks[i]
-			goAwk(chunk.buff, prog)
-			sum := 0
-			r <- sum
+			result := goAwk(chunk.buff, prog)
+			r <- result
 		}(chunks, i, res)
 	}
-	sum := 0
+	sum := float64(0)
 	for i := 0; i < n; i++ {
 		sum += <-res
 	}
+	fmt.Printf("The resulting number is %f", sum)
 	elapsed := time.Since(start)
 	fmt.Printf("\nTime elapsed %s\n", elapsed)
 }
