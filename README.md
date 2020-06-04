@@ -22,6 +22,12 @@ that there is a selected number of AWK operations that can be run in parallel.
     git clone https://github.com/gthd/pawk.git
     ```
 
+2.  Install the dependencies.
+
+    ```
+    go get github.com/gthd/goawk
+    ```  
+
 ## Demo
 
 The first line works under linux_amd64 and the second line under windows_amd64.

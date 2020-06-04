@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"reflect"
 	"strconv"
-	"time"
 
 	"github.com/gthd/goawk/interp"
 	"github.com/gthd/goawk/parser"
@@ -146,11 +146,20 @@ func goAwk(chunk []byte, prog *parser.Program) float64 {
 }
 
 func main() {
-	start := time.Now()
 	arg0, n, arg1, commandInFile := receiveArguments()
 	awkCommand := getCommand(commandInFile, arg0)
 	res := make(chan float64)
 	prog, err, varTypes := parser.ParseProgram([]byte(awkCommand), nil)
+	statement := prog.Actions[0].Stmts.String()
+	flag := true
+	for _, char := range statement {
+		if string(char) == "+" || string(char) == "-" {
+			flag = false
+		}
+	}
+	if flag {
+		panic("Cannot handle awk commands that cannot be parallelized")
+	}
 	check(err)
 	if len(varTypes) > 1 {
 		panic("Cannot handle awk command that contains local variables")
@@ -171,6 +180,9 @@ func main() {
 	for i := 0; i < n; i++ {
 		sum += <-res
 	}
+	end_statement := prog.End[0].String()
+	
+	fmt.Println(reflect.TypeOf(end_statement))
 	if sum > 0 {
 		fmt.Printf("%d", int(sum))
 	}
