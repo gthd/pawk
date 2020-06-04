@@ -81,4 +81,4 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## Acknowledgments
 
-* I want to acknowledge the help and guidance I received from my supervisor [Diomidis Spinellis](https://www2.dmst.aueb.gr/dds/).
+I want to acknowledge the help and guidance I received from my supervisor [Diomidis Spinellis](https://www2.dmst.aueb.gr/dds/).
