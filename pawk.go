@@ -171,7 +171,7 @@ func main() {
 	for i := 0; i < n; i++ {
 		sum += <-res
 	}
-	fmt.Printf("The resulting number is %f", sum)
+	fmt.Printf("The resulting number is %d", int(sum))
 	elapsed := time.Since(start)
 	fmt.Printf("\nTime elapsed %s\n", elapsed)
 }
