@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"reflect"
 	"strconv"
 
 	"github.com/gthd/goawk/interp"
@@ -181,9 +180,9 @@ func main() {
 		sum += <-res
 	}
 	end_statement := prog.End[0].String()
-	
-	fmt.Println(reflect.TypeOf(end_statement))
+
+	_ = end_statement
 	if sum > 0 {
-		fmt.Printf("%d", int(sum))
+		fmt.Printf("%d\n", int(sum))
 	}
 }
