@@ -72,3 +72,7 @@ Please read [CONTRIBUTING.md](Contributing.md) for details on our code of conduc
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
+
+## Acknowledgments
+
+* I want to acknowledge the help and guidance I received from my supervisor [Diomidis Spinellis](https://www2.dmst.aueb.gr/dds/).
