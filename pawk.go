@@ -179,9 +179,9 @@ func main() {
 	for i := 0; i < n; i++ {
 		sum += <-res
 	}
-	end_statement := prog.End[0].String()
+	endStatement := prog.End[0].String()
 
-	_ = end_statement
+	_ = endStatement
 	if sum > 0 {
 		fmt.Printf("%d\n", int(sum))
 	}
