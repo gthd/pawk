@@ -20,6 +20,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/gthd/goawk/interp"
 	"github.com/gthd/goawk/parser"
@@ -147,24 +148,44 @@ func goAwk(chunk []byte, prog *parser.Program) float64 {
 func main() {
 	arg0, n, arg1, commandInFile := receiveArguments()
 	awkCommand := getCommand(commandInFile, arg0)
+	fmt.Println(awkCommand)
 	res := make(chan float64)
 	prog, err, varTypes := parser.ParseProgram([]byte(awkCommand), nil)
-	statement := prog.Actions[0].Stmts.String()
-	flag := true
-	for _, char := range statement {
-		if string(char) == "+" || string(char) == "-" {
-			flag = false
-		}
-	}
-	if flag {
-		panic("Cannot handle awk commands that cannot be parallelized")
-	}
 	check(err)
 	if len(varTypes) > 1 {
 		panic("Cannot handle awk command that contains local variables")
 	}
-	// _, action := prog.String()
-	// fmt.Printf("%s", action) need to use regex to get the action
+
+	// if len(prog.Actions[0].Pattern) > 0 {
+	// 	actionPattern := prog.Actions[0].Pattern[0]
+	// }
+	// _ = actionPattern
+	variable := ""
+
+	if len(prog.Actions) > 0 {
+		actionStatement := prog.Actions[0].Stmts.String()
+
+		flag := true
+		for _, char := range actionStatement {
+			if string(char) == "+" || string(char) == "-" {
+				flag = false
+			}
+		}
+
+		if flag || strings.Contains(actionStatement, "print") {
+			panic("Cannot handle awk commands that cannot be parallelized")
+		}
+
+		for _, char := range actionStatement {
+			if string(char) == "+" || string(char) == "-" || string(char) == "=" {
+				break
+			}
+			if string(char) != " " {
+				variable = variable + string(char)
+			}
+		}
+	}
+
 	file := openFile(arg1)
 	defer file.Close()
 	chunks := divideFile(file, n)
@@ -179,10 +200,50 @@ func main() {
 	for i := 0; i < n; i++ {
 		sum += <-res
 	}
-	endStatement := prog.End[0].String()
 
-	_ = endStatement
-	if sum > 0 {
-		fmt.Printf("%d\n", int(sum))
+	endStatement := prog.End[0].String()
+	i := 0
+	for _, char := range endStatement {
+		if string(char) == " " {
+			i++
+		} else {
+			break
+		}
 	}
+
+	endStatement = endStatement[i:]
+	endVariable := ""
+	variables := []string{}
+	for _, char := range endStatement {
+		if string(char) == "," {
+			continue
+		}
+		if string(char) != " " {
+			endVariable = endVariable + string(char)
+		}
+		if string(char) == " " {
+			variables = append(variables, endVariable)
+			endVariable = ""
+		}
+	}
+
+	variables = append(variables, endVariable)
+	variables[len(variables)-1] = strings.TrimSuffix(variables[len(variables)-1], "\n")
+
+	if variables[0] == "print" {
+		for _, element := range variables[1:] {
+			if element == variable && variable != "" {
+				fmt.Printf(" %d ", int(sum))
+			} else {
+				if string(element[0]) == "\"" && string(element[len(element)-1]) == "\"" {
+					fmt.Printf(" %s ", element[1:len(element)-1])
+				} else {
+					panic("END conatins argument that was not existent in the Action Statement!")
+				}
+			}
+		}
+	} else {
+		fmt.Println("Only print operations supported in the END statement")
+	}
+	fmt.Println("")
 }
