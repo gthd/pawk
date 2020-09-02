@@ -18,12 +18,15 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/gthd/goawk/interp"
 	"github.com/gthd/goawk/parser"
+	"github.com/gthd/helper"
+	"github.com/pborman/getopt/v2"
 )
 
 type chunk struct {
@@ -36,54 +39,33 @@ func check(e error) {
 	}
 }
 
-func receiveArguments() (string, int, string, bool) {
-	numberOfThreads := runtime.GOMAXPROCS(0)
-	if len(os.Args) > 1 {
-		argument0 := os.Args[1]
-		receivedFile := true
-		if argument0 == "-f" { //then the awk command is inside a file so that we read the file name as an argument
-			argument1 := os.Args[2]
-			if argument1 == "-n" {
-				argument2 := os.Args[3] //awk command file
-				argument3 := os.Args[4] // file to process
-				return argument2, numberOfThreads, argument3, receivedFile
-			}
-			argument2 := os.Args[3] //threads
-			numberOfThreads, err := strconv.Atoi(argument2)
-			check(err)
-			argument3 := os.Args[4] // file to process
-			return argument1, numberOfThreads, argument3, receivedFile
-		}
-		receivedFile = false
-		if argument0 == "-n" {
-			argument1 := os.Args[2] // awk command
-			argument2 := os.Args[3] // file to process
-			return argument1, numberOfThreads, argument2, receivedFile
-		}
-		argument1 := os.Args[2] // threads
-		numberOfThreads, err := strconv.Atoi(argument1)
-		check(err)
-		argument2 := os.Args[3] // file to process
-		return argument0, numberOfThreads, argument2, receivedFile
-	}
-	panic("Did not receive any arguments")
+var (
+	value           helper.Helper
+	numberOfThreads = runtime.GOMAXPROCS(0)
+	fieldSeparator  = ":"
+	fileName        = ""
+	dumpFile        = ""
+)
+
+func init() {
+	getopt.FlagLong(&fieldSeparator, "field-separator", 'F', "the path")
+	getopt.FlagLong(&numberOfThreads, "threads", 'n', "the number of threads to be used")
+	getopt.FlagLong(&fileName, "progfile", 'f', "the file name")
+	getopt.FlagLong(&dumpFile, "dump-variables", 'd', "the file to print the global variables")
+	getopt.FlagLong(&value, "string", 'v', "strings")
 }
 
-func getCommand(receivedFile bool, commandFile string) string {
+func getCommand(commandFile string) string {
 	command := ""
-	if receivedFile {
-		f, err := os.Open(commandFile) //open the file to process it
-		check(err)
-		finfo, err := f.Stat()
-		check(err)
-		fsize := int(finfo.Size())
-		buf := make([]byte, fsize)
-		bytesContained, err := f.Read(buf)
-		check(err)
-		command = string(buf[:bytesContained])
-	} else {
-		command = commandFile
-	}
+	f, err := os.Open(commandFile) //open the file to process it
+	check(err)
+	finfo, err := f.Stat()
+	check(err)
+	fsize := int(finfo.Size())
+	buf := make([]byte, fsize)
+	bytesContained, err := f.Read(buf)
+	check(err)
+	command = string(buf[:bytesContained])
 	return command
 }
 
@@ -135,36 +117,92 @@ func divideFile(file *os.File, n int) []chunk {
 	return chunk
 }
 
-func goAwk(chunk []byte, prog *parser.Program) float64 {
+func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string) ([]float64, bool) {
 	config := &interp.Config{
 		Stdin: bytes.NewReader(chunk),
-		Vars:  []string{"OFS", ":"},
+		Vars:  []string{"OFS", fieldSeparator},
 	}
-	_, err, res := interp.ExecProgram(prog, config)
+	_, err, res, hasPrint := interp.ExecProgram(prog, config)
 	check(err)
-	return res
+	return res, hasPrint
+}
+
+func isContained(e string, s []string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }
 
 func main() {
-	arg0, n, arg1, commandInFile := receiveArguments()
-	awkCommand := getCommand(commandInFile, arg0)
-	fmt.Println(awkCommand)
-	res := make(chan float64)
-	prog, err, varTypes := parser.ParseProgram([]byte(awkCommand), nil)
+
+	getopt.Parse()
+	args := getopt.Args()
+
+	awkCommand := ""
+	if fileName == "" {
+		awkCommand = args[0]
+		args = args[1:]
+	} else {
+		awkCommand = getCommand(fileName)
+	}
+
+	values := value.ParseMultipleOptions()
+
+	var periodContextFmt string = `[Bb][Ee][Gg][Ii][Nn]\s*{`
+	sent := regexp.MustCompile(periodContextFmt)
+	ind := sent.FindAllStringIndex(awkCommand, -1)
+
+	var argString string
+	for _, va := range values {
+		argString = argString + va + ";"
+	}
+
+	var newAwkCommand string
+	if len(ind) > 0 {
+		newAwkCommand = string(awkCommand[:ind[0][1]]) + argString + string(awkCommand[ind[0][1]:])
+	} else {
+		newAwkCommand = "BEGIN { " + argString[:len(argString)-1] + "} " + awkCommand
+	}
+
+	fmt.Println(newAwkCommand)
+
+	channel := make(chan []string)
+
+	prog, err, varTypes := parser.ParseProgram([]byte(newAwkCommand), nil)
 	check(err)
+
 	if len(varTypes) > 1 {
 		panic("Cannot handle awk command that contains local variables")
 	}
 
-	// if len(prog.Actions[0].Pattern) > 0 {
-	// 	actionPattern := prog.Actions[0].Pattern[0]
-	// }
-	// _ = actionPattern
-	variable := ""
+	if dumpFile != "" {
+		dumpFile = `/home/george/Desktop/Github/pawk/text_files/` + dumpFile
+		fmt.Println(dumpFile)
+		if _, err := os.Stat(dumpFile); err == nil {
+			err := os.Remove(dumpFile)
+			check(err)
+		}
+		dfile, err := os.OpenFile(dumpFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+		check(err)
+		defer dfile.Close()
+		for k := range varTypes[""] {
+			if k == "ARGV" {
+				continue
+			}
+			_, err = dfile.Write([]byte(k + "\n"))
+			check(err)
+		}
+	}
+
+	var myVariable []string
+	var actionArgument string
+	var proceed = true
 
 	if len(prog.Actions) > 0 {
 		actionStatement := prog.Actions[0].Stmts.String()
-
 		flag := true
 		for _, char := range actionStatement {
 			if string(char) == "+" || string(char) == "-" {
@@ -177,28 +215,110 @@ func main() {
 		}
 
 		for _, char := range actionStatement {
-			if string(char) == "+" || string(char) == "-" || string(char) == "=" {
-				break
-			}
-			if string(char) != " " {
-				variable = variable + string(char)
+			if string(char) == "+" || string(char) == "-" || string(char) == "=" && proceed {
+				myVariable = append(myVariable, actionArgument)
+				actionArgument = ""
+				proceed = false
+			} else if string(char) != " " && proceed {
+				actionArgument = actionArgument + string(char)
+			} else if uint64([]byte(string(char))[0]) == 10 {
+				proceed = true
 			}
 		}
 	}
 
-	file := openFile(arg1)
-	defer file.Close()
-	chunks := divideFile(file, n)
-	for i := 0; i < n; i++ {
-		go func(chunks []chunk, i int, r chan<- float64) {
-			chunk := chunks[i]
-			result := goAwk(chunk.buff, prog)
-			r <- result
-		}(chunks, i, res)
+	var variable []string
+	for _, vvv := range myVariable {
+		if len([]byte(vvv)) > 0 {
+			variable = append(variable, vvv)
+		}
 	}
-	sum := float64(0)
-	for i := 0; i < n; i++ {
-		sum += <-res
+
+	array := make([][]string, numberOfThreads)
+	for _, file := range args {
+		file := openFile(file)
+		defer file.Close()
+		chunks := divideFile(file, numberOfThreads)
+		for i := 0; i < numberOfThreads; i++ {
+			go func(chunks []chunk, i int, r chan<- []string) {
+				var ar []string
+				chunk := chunks[i]
+				result, hasPrint := goAwk(chunk.buff, prog, fieldSeparator)
+				for _, r := range result {
+					ar = append(ar, strconv.FormatFloat(r, 'f', -1, 64))
+				}
+				ar = append(ar, strconv.FormatBool(hasPrint))
+				r <- ar
+			}(chunks, i, channel)
+		}
+		for i := 0; i < numberOfThreads; i++ {
+			array[i] = <-channel
+		}
+	}
+
+	sum := make(map[string]float64)
+	var hasPrint bool
+	for _, ar := range array {
+		for iter, a := range ar {
+			if iter < len(ar)-1 {
+				num, err := strconv.ParseFloat(a, 64)
+				check(err)
+				sum[variable[iter]] += num
+			}
+		}
+		hasPrint, err = strconv.ParseBool(array[0][len(array[0])-1])
+		check(err)
+	}
+
+	if len(prog.Begin) > 0 {
+		beginStatement := prog.Begin[0].String()
+		j := 0
+		for _, char := range beginStatement {
+			if string(char) == " " {
+				j++
+			} else {
+				break
+			}
+		}
+
+		beginStatement = beginStatement[j:]
+		beginVariable := ""
+		variables := []string{}
+		for _, char := range beginStatement {
+			if string(char) == "," {
+				for _, element := range variables {
+					_ = element
+				}
+				variables = append(variables, ",")
+				continue
+			}
+			if string(char) != " " {
+				beginVariable = beginVariable + string(char)
+			}
+			if string(char) == " " {
+				variables = append(variables, beginVariable)
+				beginVariable = ""
+			}
+		}
+
+		variables = append(variables, beginVariable)
+		variables[len(variables)-1] = strings.TrimSuffix(variables[len(variables)-1], "\n")
+		var newVariables []string
+		for _, va := range variables {
+			if len(va) > 0 {
+				newVariables = append(newVariables, strings.TrimSuffix(va, "\n"))
+			}
+		}
+
+		_ = hasPrint
+		if newVariables[0] == "print" {
+			for _, element := range newVariables[1:] {
+				if string(element[0]) == "\"" && string(element[len(element)-1]) == "\"" {
+					fmt.Printf(" %s ", element[1:len(element)-1])
+					fmt.Println()
+				}
+			}
+		}
 	}
 
 	endStatement := prog.End[0].String()
@@ -232,13 +352,13 @@ func main() {
 
 	if variables[0] == "print" {
 		for _, element := range variables[1:] {
-			if element == variable && variable != "" {
-				fmt.Printf(" %d ", int(sum))
+			if isContained(element, variable) {
+				fmt.Printf(" %d ", int(sum[element]))
 			} else {
 				if string(element[0]) == "\"" && string(element[len(element)-1]) == "\"" {
 					fmt.Printf(" %s ", element[1:len(element)-1])
 				} else {
-					panic("END conatins argument that was not existent in the Action Statement!")
+					panic("END contains unknown variable")
 				}
 			}
 		}
