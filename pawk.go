@@ -89,7 +89,7 @@ func getSize(file *os.File) int {
 }
 
 // Returns the starting index and the ending index for all the print statements of the awk command
-func returnPrintIndices(statement string) ([]int, []int){
+func returnPrintIndices(statement string) ([]int, []int) {
 	var phrase string = `print`
 	var startingIndex []int
 	var endingIndex []int
@@ -99,35 +99,46 @@ func returnPrintIndices(statement string) ([]int, []int){
 		for i := range index {
 			startingIndex = append(startingIndex, index[i][1])
 		}
-	}
 
-	for iter, b := range []byte(statement) {
-		if b == 10 {
-			endingIndex = append(endingIndex, iter)
+		for iter, b := range []byte(statement) {
+			if b == 59 {
+				endingIndex = append(endingIndex, iter)
+			}
 		}
-	}
 
-	// checks whether the first ending index is after the first starting index
-	for true {
-		if endingIndex[0] < startingIndex[0] {
-			endingIndex = endingIndex[1:]
-		} else {
-			break
+		for true {
+			if len(endingIndex) > 0 && endingIndex[0] < startingIndex[0] {
+				endingIndex = endingIndex[1:]
+			} else {
+				break
+			}
 		}
-	}
 
-	// checks whether all ending indexes are after their respective starting indexes
-	var tracker = 0
-	var test []int
-
-	for i := 0; i < len(endingIndex); i++ {
-		if endingIndex[i] > startingIndex[tracker] {
-			tracker += 1
-			test = append(test, endingIndex[i])
+		if len(endingIndex) == 0 {
+			endingIndex = append(endingIndex, len(statement))
+		} else if startingIndex[len(startingIndex)-1] > endingIndex[len(endingIndex)-1]{
+			endingIndex = append(endingIndex, len(statement)-2)
 		}
+
+		endingIndex = endingIndex[:len(startingIndex)]
+
+		// checks whether all ending indexes are after their respective starting indexes
+		var tracker = 0
+		var test []int
+
+		endingIndex = endingIndex[:len(startingIndex)]
+
+		for i := 0; i < len(endingIndex); i++ {
+			if endingIndex[i] > startingIndex[tracker] {
+				tracker += 1
+				test = append(test, endingIndex[i])
+			}
+		}
+		endingIndex = test
+		return startingIndex, endingIndex
+	} else {
+		return startingIndex, endingIndex
 	}
-	endingIndex = test
-	return startingIndex, endingIndex
 }
 
 // Returns the starting index and the ending index for all the print statements of the awk command
@@ -141,43 +152,45 @@ func returnBeginPrintIndices(statement string) ([]int, []int){
 		for i := range index {
 			startingIndex = append(startingIndex, index[i][0])
 		}
-	}
 
-	for iter, b := range []byte(statement) {
-		if b == 59 {
-			endingIndex = append(endingIndex, iter)
+		for iter, b := range []byte(statement) {
+			if b == 59 {
+				endingIndex = append(endingIndex, iter)
+			}
 		}
-	}
 
-	// checks whether the first ending index is after the first starting index
+		// checks whether the first ending index is after the first starting index
 
-	for true {
-		if len(endingIndex) > 0 && endingIndex[0] < startingIndex[0] {
-			endingIndex = endingIndex[1:]
-		} else {
-			break
+		for true {
+			if len(endingIndex) > 0 && endingIndex[0] < startingIndex[0] {
+				endingIndex = endingIndex[1:]
+			} else {
+				break
+			}
 		}
-	}
 
-	if len(endingIndex) == 0 {
-		endingIndex = append(endingIndex, len(statement))
-	}
-
-	// checks whether all ending indexes are after their respective starting indexes
-	var tracker = 0
-	var test []int
-
-	// Since ending Index should contain
-	endingIndex = endingIndex[:len(startingIndex)]
-
-	for i := 0; i < len(endingIndex); i++ {
-		if endingIndex[i] > startingIndex[tracker] {
-			tracker += 1
-			test = append(test, endingIndex[i])
+		if len(endingIndex) == 0 {
+			endingIndex = append(endingIndex, len(statement))
 		}
+
+		// checks whether all ending indexes are after their respective starting indexes
+		var tracker = 0
+		var test []int
+
+		// Since ending Index should contain
+		endingIndex = endingIndex[:len(startingIndex)]
+
+		for i := 0; i < len(endingIndex); i++ {
+			if endingIndex[i] > startingIndex[tracker] {
+				tracker += 1
+				test = append(test, endingIndex[i])
+			}
+		}
+		endingIndex = test
+		return startingIndex, endingIndex
+	} else {
+		return startingIndex, endingIndex
 	}
-	endingIndex = test
-	return startingIndex, endingIndex
 }
 
 // Returns the starting index and the ending index for all the if statements of the awk command
@@ -319,9 +332,10 @@ func main() {
 		newAwkCommand = awkCommand
 	}
 
-	fmt.Println(newAwkCommand)
-
-	// Handles variable assignment in BEGIN
+	// Handles variable assignment in BEGIN as well as print statement
+	// CANNOT have something like this BEGIN {print "cndckd" ; emp=1 ; print "kcndkc"}
+	// SHOULD BE BEGIN {print "cndckd" ; print "kcndkc" ; emp=1}
+	// OR BEGIN {emp=1 ; print "cndckd" ; print "kcndkc"}
 	if strings.Contains(newAwkCommand, "BEGIN") { //Is it only BEGIN ? Or it can be Begin ?
 		// beginStatement := prog.Begin[0].String()
 
@@ -331,39 +345,46 @@ func main() {
 
 		printStartIndex, printEndIndex := returnBeginPrintIndices(beginStatement)
 
-		// checks that print operation have something to print
-		for i := 0; i < len(printEndIndex); i++ {
-			if printEndIndex[i] - printStartIndex[i] <=1 {
-				panic("Wrong syntax! Print No " + strconv.Itoa(i+1) + " does not contain anything")
+		// If print exists in BEGIN
+		if len(printStartIndex) > 0 {
+			// checks that print operation have something to print
+			for i := 0; i < len(printEndIndex); i++ {
+				if printEndIndex[i] - printStartIndex[i] <=1 {
+					panic("Wrong syntax! Print No " + strconv.Itoa(i+1) + " does not contain anything")
+				}
 			}
-		}
 
-		// builds new string that contains everything except print statements
-		var str strings.Builder
-		str.WriteString(beginStatement[:printStartIndex[0]])
-		for iter := 1; iter < len(printEndIndex); iter++ {
-			str.WriteString(beginStatement[printEndIndex[iter-1]:printStartIndex[iter]])
-		}
-		str.WriteString(beginStatement[printEndIndex[len(printEndIndex)-1]:])
-
-		mystring := str.String()
-
-		indexOfBegin := strings.Index(newAwkCommand, `}`)
-
-		if string(mystring[len(mystring)-1]) != "}" {
-			mystring = mystring + `}`
-		}
-
-		eventualAwkCommand = mystring + newAwkCommand[indexOfBegin+1:]
-
-		for iter := 0; iter < len(printEndIndex); iter++ {
-			printvariable := beginStatement[printStartIndex[iter]:printEndIndex[iter]]
-			if string(printvariable[6]) == "\"" && string(printvariable[len(printvariable)-2]) == "\"" {
-				fmt.Printf(" %s ", printvariable[7:len(printvariable)-2])
-			} else {
-				panic("Not provided a valid argument")
+			// builds new string that contains everything except print statements
+			var str strings.Builder
+			str.WriteString(beginStatement[:printStartIndex[0]])
+			for iter := 1; iter < len(printEndIndex); iter++ {
+				str.WriteString(beginStatement[printEndIndex[iter-1]:printStartIndex[iter]])
 			}
+			str.WriteString(beginStatement[printEndIndex[len(printEndIndex)-1]:])
+
+			mystring := str.String()
+
+			indexOfBegin := strings.Index(newAwkCommand, `}`)
+
+			if string(mystring[len(mystring)-1]) != "}" {
+				mystring = mystring + `}`
+			}
+
+			eventualAwkCommand = mystring + newAwkCommand[indexOfBegin+1:]
+
+			for iter := 0; iter < len(printEndIndex); iter++ {
+				printvariable := beginStatement[printStartIndex[iter]:printEndIndex[iter]]
+				if string(printvariable[6]) == "\"" && string(printvariable[len(printvariable)-2]) == "\"" {
+					fmt.Printf(" %s ", printvariable[7:len(printvariable)-2])
+				} else {
+					panic("Not provided a valid argument")
+				}
+			}
+		} else {
+			eventualAwkCommand = newAwkCommand
 		}
+	} else {
+		eventualAwkCommand = newAwkCommand
 	}
 
 	channel := make(chan []string)
@@ -459,7 +480,6 @@ func main() {
 
 	// Responsible for receiving the result from each channel and accumulating it. Works sort of like a reduce operation for accumulation
 	sum := make(map[string]float64)
-	var hasPrint bool
 	for _, ar := range array {
 		for iter, a := range ar {
 			if iter < len(ar)-1 {
@@ -468,68 +488,17 @@ func main() {
 				sum[variable[iter]] += num
 			}
 		}
-		hasPrint, err = strconv.ParseBool(array[0][len(array[0])-1])
+		_, err = strconv.ParseBool(array[0][len(array[0])-1])
 		check(err)
 	}
 
-	_ = hasPrint
+	if strings.Contains(eventualAwkCommand, "END") { //Is it only END ? Or it can be End ?
 
-	// if len(prog.Begin) > 0 {
-	// 	beginStatement := prog.Begin[0].String()
-	// 	j := 0
-	// 	for _, char := range beginStatement {
-	// 		if string(char) == " " {
-	// 			j++
-	// 		} else {
-	// 			break
-	// 		}
-	// 	}
-	//
-	// 	beginStatement = beginStatement[j:]
-	// 	beginVariable := ""
-	// 	variables := []string{}
-	// 	for _, char := range beginStatement {
-	// 		if string(char) == "," {
-	// 			for _, element := range variables {
-	// 				_ = element
-	// 			}
-	// 			variables = append(variables, ",")
-	// 			continue
-	// 		}
-	// 		if string(char) != " " {
-	// 			beginVariable = beginVariable + string(char)
-	// 		}
-	// 		if string(char) == " " {
-	// 			variables = append(variables, beginVariable)
-	// 			beginVariable = ""
-	// 		}
-	// 	}
-	//
-	// 	variables = append(variables, beginVariable)
-	// 	variables[len(variables)-1] = strings.TrimSuffix(variables[len(variables)-1], "\n")
-	// 	var newVariables []string
-	// 	for _, va := range variables {
-	// 		if len(va) > 0 {
-	// 			newVariables = append(newVariables, strings.TrimSuffix(va, "\n"))
-	// 		}
-	// 	}
-	//
-	// 	fmt.Println(newVariables)
-	//
-	// 	_ = hasPrint
-	// 	if newVariables[0] == "print" {
-	// 		for _, element := range newVariables[1:] {
-	// 			if string(element[0]) == "\"" && string(element[len(element)-1]) == "\"" {
-	// 				fmt.Printf(" %s ", element[1:len(element)-1])
-	// 				fmt.Println()
-	// 			}
-	// 		}
-	// 	}
-	// }
+		var regexendstring string = `[Ee][Nn][Dd]\s*{`
+		sent := regexp.MustCompile(regexendstring)
+		ind := sent.FindAllStringIndex(eventualAwkCommand, -1)
 
-	if len(prog.End) > 0 {
-
-		endStatement := prog.End[0].String()
+		endStatement := eventualAwkCommand[ind[0][0]:len(eventualAwkCommand)]
 
 		ifStartIndex, ifEndIndex := returnIfIndices(endStatement)
 
