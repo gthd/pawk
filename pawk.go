@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -286,7 +287,7 @@ func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string) ([]float64
 	return res, hasPrint
 }
 
-// Checks whether a string is contained inside a slice
+// Checks whether a string is contained inside a slice.
 func isContained(e string, s []string) bool {
 	for _, a := range s {
 		if a == e {
