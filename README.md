@@ -37,7 +37,7 @@ The invocation compatibility of Pawk was inspired by GNU Awk and it is as follow
 
     ```
     ./pawk [-n N] [-d[n]] [-F fs] [-v var=value] [prog | -f progfile] [file ...]
-    ```
+    ```  
 
 The difference with Gawk is with respect to the use of the -d option. In GAWK if a file name is not provided then the global variables are written by default to awkvars.out in the current directory. In Pawk if a file name is not provided to the -d option then there is no file written by default.
 
