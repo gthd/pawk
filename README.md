@@ -31,15 +31,15 @@ that there is a selected number of AWK operations that can be run in parallel.
 
 ## Demo
 
-    The first line works under linux_amd64 and the second line under windows_amd64.
+The first line works under linux_amd64 and the second line under windows_amd64.
 
-    The invocation compatibility of Pawk was inspired by GNU Awk and it is as following:
+The invocation compatibility of Pawk was inspired by GNU Awk and it is as following:
 
     ```
     ./pawk [-n N] [-d[n]] [-F fs] [-v var=value] [prog | -f progfile] [file ...]
     ```  
 
-    The difference with Gawk is with respect to the use of the -d option. In GAWK if a file name is not provided then the global variables are written by default to awkvars.out in the current directory. In Pawk if a file name is not provided to the -d option then there is no file written by default.
+The difference with Gawk is with respect to the use of the -d option. In GAWK if a file name is not provided then the global variables are written by default to awkvars.out in the current directory. In Pawk if a file name is not provided to the -d option then there is no file written by default.
 
 ## Details
 
