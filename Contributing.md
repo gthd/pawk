@@ -25,6 +25,7 @@ dependencies. Therefore run:
 
   ```
     go get github.com/gthd/goawk
+    go get github.com/gthd/helper
   ```
 
 ## Code of Conduct

@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -116,7 +115,7 @@ func returnPrintIndices(statement string) ([]int, []int) {
 		}
 
 		if len(endingIndex) == 0 {
-			endingIndex = append(endingIndex, len(statement))
+			endingIndex = append(endingIndex, len(statement)-2)
 		} else if startingIndex[len(startingIndex)-1] > endingIndex[len(endingIndex)-1]{
 			endingIndex = append(endingIndex, len(statement)-2)
 		}
@@ -283,6 +282,7 @@ func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string) ([]float64
 		Vars:  []string{"OFS", fieldSeparator},
 	}
 	_, err, res, hasPrint := interp.ExecProgram(prog, config)
+	fmt.Println(res)
 	check(err)
 	return res, hasPrint
 }
@@ -423,6 +423,7 @@ func main() {
 	// Used for ensuring that only accumulation operations are allowed in action statements. Print operations not allowed since they cannot be parallelised
 	if len(prog.Actions) > 0 {
 		actionStatement := prog.Actions[0].Stmts.String()
+
 		flag := true
 		for _, char := range actionStatement {
 			if string(char) == "+" || string(char) == "-" {
@@ -452,11 +453,35 @@ func main() {
 	var variable []string
 	for _, vvv := range myVariable {
 		if len([]byte(vvv)) > 0 {
-			variable = append(variable, vvv)
+			var regexifstring string = `[iI][Ff][(]\s*`
+			comp := regexp.MustCompile(regexifstring)
+			found := comp.FindAllStringIndex(vvv, -1)
+			if len(found) > 0 {
+				var ris string = `\s*[)]\s*[{]\s*`
+				cp := regexp.MustCompile(ris)
+				f := cp.FindAllStringIndex(vvv, -1)
+				if len(f) > 0 {
+					if !(isContained(vvv[found[0][1]:f[0][0]], variable)) {
+						variable = append(variable, vvv[found[0][1]:f[0][0]])
+					}
+					if !(isContained(vvv[f[0][1]:], variable)) {
+						variable = append(variable, vvv[f[0][1]:])
+					}
+				}
+			}
+			matched, _ := regexp.MatchString(`[iI][Ff][(]\s*`, vvv)
+			if !(isContained(vvv, variable)) && !(matched){
+				variable = append(variable, vvv)
+			}
 		}
 	}
 
 	// Goroutines usage for allowing paralle processing.
+	if numberOfThreads > runtime.GOMAXPROCS(0) {
+		fmt.Println("Number of threads surpasses available CPU cores. Reverting to " + strconv.Itoa(runtime.GOMAXPROCS(0)) + " threads. (Equal to the maximum number of CPU cores)")
+		numberOfThreads = runtime.GOMAXPROCS(0)
+	}
+
 	array := make([][]string, numberOfThreads)
 	for _, file := range args {
 		file := openFile(file)
@@ -538,15 +563,11 @@ func main() {
 								if sum[item] != gg {
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-
+									for _, pr := range toprintslice {
 										// since comma is included in the first argument of print exclude it
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
-
 										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
@@ -557,104 +578,108 @@ func main() {
 										}
 									}
 								}
-
-								// for == operator
+							// for == operator
 							} else if ifStatement[1] == `==` {
 								if sum[item] == gg { //different types
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+									for _, pr := range toprintslice {
+										// since comma is included in the first argument of print exclude it
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
+										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
+
+										// used when arggument to print is a variable
 										} else if item == pr {
 											fmt.Printf(" %d ", int(sum[item]))
 										}
 									}
 								}
-
-								// for >= operator
+							// for >= operator
 							} else if ifStatement[1] == `>=` {
 								if sum[item] >= gg {
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+									for _, pr := range toprintslice {
+										// since comma is included in the first argument of print exclude it
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
+										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
+
+										// used when arggument to print is a variable
 										} else if item == pr {
 											fmt.Printf(" %d ", int(sum[item]))
 										}
 									}
 								}
-
-								// for > operator
+							// for > operator
 							} else if ifStatement[1] == `>` {
 								if sum[item] > gg {
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+									for _, pr := range toprintslice {
+										// since comma is included in the first argument of print exclude it
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
+										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
+
+										// used when arggument to print is a variable
 										} else if item == pr {
 											fmt.Printf(" %d ", int(sum[item]))
 										}
 									}
 								}
-
-								// for <= operator
+							// for <= operator
 							} else if ifStatement[1] == `<=` {
 								if sum[item] <= gg {
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+									for _, pr := range toprintslice {
+										// since comma is included in the first argument of print exclude it
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
+										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
+
+										// used when arggument to print is a variable
 										} else if item == pr {
 											fmt.Printf(" %d ", int(sum[item]))
 										}
 									}
 								}
-
-								// for < operator
+							// for < operator
 							} else if ifStatement[1] == `<` {
 								if sum[item] < gg {
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+									for _, pr := range toprintslice {
+										// since comma is included in the first argument of print exclude it
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
+										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
+
+										// used when arggument to print is a variable
 										} else if item == pr {
 											fmt.Printf(" %d ", int(sum[item]))
 										}
 									}
 								}
 							}
-
-							// If argument of if statement is a string
+						// If argument of if statement is a string
 						} else if string(ifStatement[0][0]) == "\"" && string(ifStatement[0][len(ifStatement[0])-1]) == "\"" {
 							op := ifStatement[len(ifStatement)-1]
 
@@ -668,14 +693,16 @@ func main() {
 								if ifStatement[0] != op {
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+									for _, pr := range toprintslice {
+										// since comma is included in the first argument of print exclude it
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
+										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
+
+										// used when arggument to print is a variable
 										} else if item == pr {
 											fmt.Printf(" %d ", int(sum[item]))
 										}
@@ -685,14 +712,16 @@ func main() {
 								if ifStatement[0] == op { //different types
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+									for _, pr := range toprintslice {
+										// since comma is included in the first argument of print exclude it
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
+										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
+
+										// used when arggument to print is a variable
 										} else if item == pr {
 											fmt.Printf(" %d ", int(sum[item]))
 										}
@@ -702,14 +731,16 @@ func main() {
 								if ifStatement[0] >= op {
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+									for _, pr := range toprintslice {
+										// since comma is included in the first argument of print exclude it
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
+										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
+
+										// used when arggument to print is a variable
 										} else if item == pr {
 											fmt.Printf(" %d ", int(sum[item]))
 										}
@@ -719,14 +750,16 @@ func main() {
 								if ifStatement[0] > op {
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+									for _, pr := range toprintslice {
+										// since comma is included in the first argument of print exclude it
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
+										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
+
+										// used when arggument to print is a variable
 										} else if item == pr {
 											fmt.Printf(" %d ", int(sum[item]))
 										}
@@ -736,14 +769,16 @@ func main() {
 								if ifStatement[0] <= op {
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+									for _, pr := range toprintslice {
+										// since comma is included in the first argument of print exclude it
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
+										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
+
+										// used when arggument to print is a variable
 										} else if item == pr {
 											fmt.Printf(" %d ", int(sum[item]))
 										}
@@ -753,14 +788,16 @@ func main() {
 								if ifStatement[0] < op {
 									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
 									toprintslice = strings.Fields(toprint)
-									for i, pr := range toprintslice {
-										if i == 0 {
-											if string(pr[len(pr)-1]) == `,` {
-												pr = pr[:len(pr)-1]
-											}
+									for _, pr := range toprintslice {
+										// since comma is included in the first argument of print exclude it
+										if string(pr[len(pr)-1]) == `,` {
+											pr = pr[:len(pr)-1]
 										}
+										// used when argument to print is a string
 										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
 											fmt.Printf(" %s ", pr[1:len(pr)-1])
+
+										// used when arggument to print is a variable
 										} else if item == pr {
 											fmt.Printf(" %d ", int(sum[item]))
 										}
@@ -795,23 +832,18 @@ func main() {
 		for _, ind := range printindices {
 			toprint = endStatement[printStartIndex[ind]:printEndIndex[ind]]
 			toprintslice = strings.Fields(toprint)
-			for _, item := range variable {
-				for i, pr := range toprintslice {
-					if i == 0 {
-						if string(pr[len(pr)-1]) == `,` {
-							pr = pr[:len(pr)-1]
-						}
-					}
-					if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-						fmt.Printf(" %s ", pr[1:len(pr)-1])
-					} else if item == pr {
-						fmt.Printf(" %d ", int(sum[item]))
-					}
+			for _, pr := range toprintslice {
+				if string(pr[len(pr)-1]) == `,` {
+					pr = pr[:len(pr)-1]
+				}
+				if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
+					fmt.Printf(" %s ", pr[1:len(pr)-1])
+				} else if isContained(pr, variable) {
+					fmt.Printf(" %d ", int(sum[pr]))
 				}
 			}
 		}
-
-		fmt.Println()
 	}
+
 	fmt.Println()
 }

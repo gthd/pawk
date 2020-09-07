@@ -26,46 +26,19 @@ that there is a selected number of AWK operations that can be run in parallel.
 
     ```
     go get github.com/gthd/goawk
+    go get github.com/gthd/helper
     ```  
 
 ## Demo
 
 The first line works under linux_amd64 and the second line under windows_amd64.
 
-To execute Pawk one does not need to install its dependencies, since an executable
-is included in the repository. There are four options to execute Pawk.
-
-1. If the command to run exists in the file `awk_command.txt` and the user does
-  not specify the number of threads that are going to be used:
+The invocation compatibility of Pawk was inspired by GNU Awk and it is as following:
 
     ```
-    ./pawk -f -n awk_command.txt data.txt
-    ./pawk.exe -f -n awk_command.txt data.txt
+    ./pawk [-n N] [-d[n]] [-F fs] [-v var=value] [prog | -f progfile] [file ...]
     ```
-
-2. If the command to run exists in the file `awk_command.txt` and the user does
-  specify the number of threads, 7 in this example, that are going to be used:
-
-    ```
-    ./pawk -f awk_command.txt 7 data.txt
-    ./pawk.exe -f awk_command.txt 7 data.txt
-    ```
-
-3. If the command to run is given in the terminal and the user does not specify
-  the number of threads that are going to be used:
-
-    ```
-    ./pawk -n '$2*$3 > 5 { emp = emp + 1 } END {print emp}' data.txt
-    ./pawk.exe -n '$2*$3 > 5 { emp = emp + 1 } END {print emp}' data.txt
-    ```
-
-4. If the command to run is given in the terminal and the user does specify
-  the number of threads, 7 in this example, that are going to be used:
-
-    ```
-    ./pawk '$2*$3 > 5 { emp = emp + 1 } END {print emp}' 7 data.txt
-    ./pawk.exe '$2*$3 > 5 { emp = emp + 1 } END {print emp}' 7 data.txt
-    ```
+The difference with Gawk is with respect to the use of the -d option. In GAWK if a file name is not provided then the global variables are written by default to awkvars.out in the current directory. In Pawk if a file name is not provided to the -d option then there is no file written by default.
 
 ## Contributing
 
@@ -81,4 +54,4 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## Acknowledgments
 
-I want to acknowledge the help and guidance I received from my supervisor [Diomidis Spinellis](https://www2.dmst.aueb.gr/dds/).
+I want to acknowledge the help and guidance I received from my supervisor Professor [Diomidis Spinellis](https://www2.dmst.aueb.gr/dds/).
