@@ -41,6 +41,44 @@ The invocation compatibility of Pawk was inspired by GNU Awk and it is as follow
 
 The difference with Gawk is with respect to the use of the -d option. In GAWK if a file name is not provided then the global variables are written by default to awkvars.out in the current directory. In Pawk if a file name is not provided to the -d option then there is no file written by default.
 
+## Details
+
+1. When wanting to print a series of variables then they must be separated in this way:
+
+    ```
+    print a, b, v
+    ```
+This does not work:
+
+    ```
+    print a,b,v
+    ```
+2. When having an unknown variable in a print statement then pawk just ignores it
+
+3. When trying to run pawk with a number of threads that surpass the maximum amount of processing cores available, then an informative message is printed in the console, while threads are set to the    maximum available number of cores.
+
+4. When using a print in the BEGIN Statement then the order matters. The following order should be kept:
+
+    ```
+    BEGIN {print "hello" ; print "world" ; emp=1}
+    BEGIN {emp=1 ; print "hello" ; print "world"}
+    ```
+    This does not work as expected:
+
+    ```
+    BEGIN {print "hello" ; emp=1 ; print "world"}
+    ```
+
+5. One should always indicate Begin statements with the keyword `BEGIN`. Any other variance like `Begin` or `begin` leads to unexpected results.
+
+6. One should always indicate End statements with the keyword `END`. Any other variance like `End` or `end` leads to unexpected results.
+
+7. Local variables are not allowed.
+
+8. Dump File is written in the sub-directory text_files
+
+9. 
+
 ## Contributing
 
 Please read [CONTRIBUTING.md](Contributing.md) for details on our code of conduct, and the process for submitting pull requests to us.
