@@ -48,14 +48,16 @@ The difference with Gawk is with respect to the use of the -d option. In GAWK if
     ```
     print a, b, v
     ```
+    
 This does not work:
 
     ```
     print a,b,v
     ```
+
 2. When having an unknown variable in a print statement then pawk just ignores it
 
-3. When trying to run pawk with a number of threads that surpass the maximum amount of processing cores available, then an informative message is printed in the console, while threads are set to the    maximum available number of cores.
+3. When trying to run pawk with a number of threads that surpass the maximum amount of processing cores available, then an informative message is printed in the console, while threads are set to the    maximum available number of cores
 
 4. When using a print in the BEGIN Statement then the order matters. The following order should be kept:
 
@@ -69,15 +71,15 @@ This does not work:
     BEGIN {print "hello" ; emp=1 ; print "world"}
     ```
 
-5. One should always indicate Begin statements with the keyword `BEGIN`. Any other variance like `Begin` or `begin` leads to unexpected results.
+5. One should always indicate Begin statements with the keyword `BEGIN`. Any other variance like `Begin` or `begin` leads to unexpected results
 
-6. One should always indicate End statements with the keyword `END`. Any other variance like `End` or `end` leads to unexpected results.
+6. One should always indicate End statements with the keyword `END`. Any other variance like `End` or `end` leads to unexpected results
 
-7. Local variables are not allowed.
+7. Local variables are not allowed
 
 8. Dump File is written in the sub-directory text_files
 
-9. 
+9. Currently only accumulation is supported
 
 ## Contributing
 
