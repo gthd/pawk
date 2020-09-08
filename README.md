@@ -77,7 +77,7 @@ The difference with Gawk is with respect to the use of the -d option. In GAWK if
 
 7. Local variables are not allowed
 
-8. Dump File is written in the sub-directory text_files
+8. Dump File is written in the sub-directory text_files/
 
 9. Currently only accumulation is supported
 

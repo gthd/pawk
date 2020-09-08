@@ -282,7 +282,7 @@ func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string) ([]float64
 		Vars:  []string{"OFS", fieldSeparator},
 	}
 	_, err, res, hasPrint := interp.ExecProgram(prog, config)
-	fmt.Println(res)
+	// fmt.Println(res)
 	check(err)
 	return res, hasPrint
 }
