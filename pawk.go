@@ -12,7 +12,7 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 
-package main 
+package main
 
 import (
 	"bytes"
@@ -41,27 +41,27 @@ func check(e error) {
 }
 
 var (
-	value           helper.Helper
-	numberOfThreads = runtime.GOMAXPROCS(0)
-	fieldSeparator  = " "
+	value                helper.Helper
+	numberOfThreads      = runtime.GOMAXPROCS(0)
+	fieldSeparator       = " "
 	offsetFieldSeparator = ":"
-	fileName        = ""
-	dumpFile        = ""
-	eventualAwkCommand string
-	endStatement string
-	nameSlice []string
-	min float64
-	max float64
-	indexEnd [][]int
-	emptyStmt bool
-	text []byte
-	pp *parser.Program
+	fileName             = ""
+	dumpFile             = ""
+	eventualAwkCommand   string
+	endStatement         string
+	nameSlice            []string
+	min                  float64
+	max                  float64
+	indexEnd             [][]int
+	emptyStmt            bool
+	text                 []byte
+	pp                   *parser.Program
 )
 
 type received struct {
-	results []float64
+	results         []float64
 	nativeFunctions []bool
-	functionNames []string
+	functionNames   []string
 }
 
 // Used to parse input arguments given by the user from console
@@ -105,8 +105,8 @@ func getSize(file *os.File) int {
 }
 
 // Returns the starting index and the ending index for all the print statements of the awk command
-func returnBeginPrintIndices(statement string) ([]int, []int){
-	var phrase string = `print`
+func returnBeginPrintIndices(statement string) ([]int, []int) {
+	var phrase = `print`
 	var startingIndex []int
 	var endingIndex []int
 	compiled := regexp.MustCompile(phrase)
@@ -124,7 +124,7 @@ func returnBeginPrintIndices(statement string) ([]int, []int){
 
 		// checks whether the first ending index is after the first starting index
 
-		for true {
+		for {
 			if len(endingIndex) > 0 && endingIndex[0] < startingIndex[0] {
 				endingIndex = endingIndex[1:]
 			} else {
@@ -147,15 +147,14 @@ func returnBeginPrintIndices(statement string) ([]int, []int){
 
 		for i := 0; i < len(endingIndex); i++ {
 			if endingIndex[i] > startingIndex[tracker] {
-				tracker += 1
+				tracker++
 				test = append(test, endingIndex[i])
 			}
 		}
 		endingIndex = test
 		return startingIndex, endingIndex
-	} else {
-		return startingIndex, endingIndex
 	}
+	return startingIndex, endingIndex
 }
 
 // Used to divide the file to n equal parts that will be fed to the n different processors running in parallel
@@ -204,7 +203,7 @@ func divideFile(file *os.File, n int) []chunk {
 func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFieldSeparator string, funcs map[string]interface{}) ([]float64, []bool, []string) {
 	config := &interp.Config{
 		Stdin: bytes.NewReader(chunk),
-		Vars: []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+		Vars:  []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
 		Funcs: funcs,
 	}
 	_, err, res, natives, names := interp.ExecProgram(prog, config)
@@ -213,26 +212,18 @@ func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFiel
 }
 
 // Checks whether a string is contained inside a slice.
-func isContained(e string, s []string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
-}
 
 func getFunctions() map[string]interface{} {
 
 	funcs := map[string]interface{}{
 		"min": func(num1 float64, num2 float64) float64 {
-			if (num1 < num2) {
+			if num1 < num2 {
 				return num1
 			}
 			return num2
 		},
 		"max": func(num1 float64, num2 float64) float64 {
-			if (num1 > num2) {
+			if num1 > num2 {
 				return num1
 			}
 			return num2
@@ -250,9 +241,7 @@ func getFunctions() map[string]interface{} {
 	return funcs
 }
 
-
 func main() {
-
 	getopt.Parse()
 	args := getopt.Args()
 
@@ -267,7 +256,7 @@ func main() {
 	values := value.ParseMultipleOptions()
 
 	// used for passing to the BEGIN statement the values given from console with -v option
-	var periodContextFmt string = `[Bb][Ee][Gg][Ii][Nn]\s*{`
+	var periodContextFmt = `[Bb][Ee][Gg][Ii][Nn]\s*{`
 	sent := regexp.MustCompile(periodContextFmt)
 	ind := sent.FindAllStringIndex(awkCommand, -1)
 
@@ -302,7 +291,7 @@ func main() {
 		if len(printStartIndex) > 0 {
 			// checks that print operation have something to print
 			for i := 0; i < len(printEndIndex); i++ {
-				if printEndIndex[i] - printStartIndex[i] <=1 {
+				if printEndIndex[i]-printStartIndex[i] <= 1 {
 					panic("Wrong syntax! Print No " + strconv.Itoa(i+1) + " does not contain anything")
 				}
 			}
@@ -343,7 +332,7 @@ func main() {
 	}
 
 	if strings.Contains(newAwkCommand, "END") { //Is it only BEGIN ? Or it can be Begin ?
-		var regexstring string = `[Ee][Nn][Dd]\s*{`
+		var regexstring = `[Ee][Nn][Dd]\s*{`
 		comp := regexp.MustCompile(regexstring)
 		indexEnd = comp.FindAllStringIndex(newAwkCommand, -1)
 
@@ -358,13 +347,13 @@ func main() {
 	funcs := getFunctions()
 
 	channel := make(chan *received)
-	config := &parser.ParserConfig {
+	config := &parser.ParserConfig{
 		Funcs: funcs,
 	}
 
 	init := eventualAwkCommand
 
-	bbb := eventualAwkCommand[strings.Index(newAwkCommand, "}")+1:indexEnd[0][0]]
+	bbb := eventualAwkCommand[strings.Index(newAwkCommand, "}")+1 : indexEnd[0][0]]
 
 	printStartIndex, printEndIndex := returnBeginPrintIndices(bbb)
 
@@ -372,7 +361,7 @@ func main() {
 	if len(printStartIndex) > 0 {
 		// checks that print operation have something to print
 		for i := 0; i < len(printEndIndex); i++ {
-			if printEndIndex[i] - printStartIndex[i] <=1 {
+			if printEndIndex[i]-printStartIndex[i] <= 1 {
 				panic("Wrong syntax! Print No " + strconv.Itoa(i+1) + " does not contain anything")
 			}
 		}
@@ -424,7 +413,7 @@ func main() {
 		input := bytes.NewReader(text)
 
 		configEnd := &interp.Config{
-			Stdin: input,
+			Stdin:  input,
 			Output: nil,
 			Error:  ioutil.Discard,
 			Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
@@ -436,7 +425,7 @@ func main() {
 
 	funcnames := make([]string, 0, len(funcs))
 	for k := range funcs {
-			funcnames = append(funcnames, k)
+		funcnames = append(funcnames, k)
 	}
 
 	if len(varTypes) > 1 {
@@ -461,7 +450,6 @@ func main() {
 			check(err)
 		}
 	}
-
 
 	var myVariable []string
 	var actionArgument string
@@ -552,7 +540,7 @@ func main() {
 	boolSlice := array[0].nativeFunctions
 	sum := make(map[string]float64)
 	if len(variable) > 0 {
-		for i := 0; i < len(boolSlice); i ++ {
+		for i := 0; i < len(boolSlice); i++ {
 			if boolSlice[i] { //means we deal with native function
 				if nameSlice[j] == "min" {
 					min = array[0].results[j]
@@ -571,7 +559,7 @@ func main() {
 					}
 					mapOfVariables[variable[i]] = max
 				}
-				j += 1
+				j++
 			} else {
 				for _, ar := range array {
 					sum[variable[i]] += ar.results[i]
@@ -588,7 +576,7 @@ func main() {
 	}
 
 	keys := make([]string, 0, len(end.Scalars))
-  for k := range end.Scalars {
+	for k := range end.Scalars {
 		keys = append(keys, k)
 	}
 
@@ -598,11 +586,11 @@ func main() {
 
 	input := bytes.NewReader([]byte("foo bar\n\nbaz buz"))
 	configEnd := &interp.Config{
-		Stdin: input,
+		Stdin:  input,
 		Output: nil,
 		Error:  ioutil.Discard,
 		Vars:   []string{"OFS", " ", "FS", " "},
-		Funcs: funcs,
+		Funcs:  funcs,
 	}
 
 	_, err, _ = interp.ExecOneThread(end, configEnd)
