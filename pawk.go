@@ -17,6 +17,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"regexp"
 	"runtime"
@@ -42,20 +43,35 @@ func check(e error) {
 var (
 	value           helper.Helper
 	numberOfThreads = runtime.GOMAXPROCS(0)
-	fieldSeparator  = ":"
+	fieldSeparator  = " "
+	offsetFieldSeparator = ":"
 	fileName        = ""
 	dumpFile        = ""
-	ifStatement []string
 	eventualAwkCommand string
+	endStatement string
+	nameSlice []string
+	min float64
+	max float64
+	indexEnd [][]int
+	emptyStmt bool
+	text []byte
+	pp *parser.Program
 )
+
+type received struct {
+	results []float64
+	nativeFunctions []bool
+	functionNames []string
+}
 
 // Used to parse input arguments given by the user from console
 func init() {
-	getopt.FlagLong(&fieldSeparator, "field-separator", 'F', "the path")
+	getopt.FlagLong(&fieldSeparator, "field-separator", 'F', "the field separator")
 	getopt.FlagLong(&numberOfThreads, "threads", 'n', "the number of threads to be used")
 	getopt.FlagLong(&fileName, "progfile", 'f', "the file name")
 	getopt.FlagLong(&dumpFile, "dump-variables", 'd', "the file to print the global variables")
 	getopt.FlagLong(&value, "string", 'v', "strings")
+	getopt.FlagLong(&offsetFieldSeparator, "offset-field-separator", 'o', "the offset field separator")
 }
 
 // Used when the awk command is provided inside a file rather than written in the console
@@ -89,59 +105,6 @@ func getSize(file *os.File) int {
 }
 
 // Returns the starting index and the ending index for all the print statements of the awk command
-func returnPrintIndices(statement string) ([]int, []int) {
-	var phrase string = `print`
-	var startingIndex []int
-	var endingIndex []int
-	compiled := regexp.MustCompile(phrase)
-	index := compiled.FindAllStringIndex(statement, -1)
-	if len(index) > 0 {
-		for i := range index {
-			startingIndex = append(startingIndex, index[i][1])
-		}
-
-		for iter, b := range []byte(statement) {
-			if b == 59 {
-				endingIndex = append(endingIndex, iter)
-			}
-		}
-
-		for true {
-			if len(endingIndex) > 0 && endingIndex[0] < startingIndex[0] {
-				endingIndex = endingIndex[1:]
-			} else {
-				break
-			}
-		}
-
-		if len(endingIndex) == 0 {
-			endingIndex = append(endingIndex, len(statement)-2)
-		} else if startingIndex[len(startingIndex)-1] > endingIndex[len(endingIndex)-1]{
-			endingIndex = append(endingIndex, len(statement)-2)
-		}
-
-		endingIndex = endingIndex[:len(startingIndex)]
-
-		// checks whether all ending indexes are after their respective starting indexes
-		var tracker = 0
-		var test []int
-
-		endingIndex = endingIndex[:len(startingIndex)]
-
-		for i := 0; i < len(endingIndex); i++ {
-			if endingIndex[i] > startingIndex[tracker] {
-				tracker += 1
-				test = append(test, endingIndex[i])
-			}
-		}
-		endingIndex = test
-		return startingIndex, endingIndex
-	} else {
-		return startingIndex, endingIndex
-	}
-}
-
-// Returns the starting index and the ending index for all the print statements of the awk command
 func returnBeginPrintIndices(statement string) ([]int, []int){
 	var phrase string = `print`
 	var startingIndex []int
@@ -171,6 +134,8 @@ func returnBeginPrintIndices(statement string) ([]int, []int){
 
 		if len(endingIndex) == 0 {
 			endingIndex = append(endingIndex, len(statement))
+		} else if startingIndex[len(startingIndex)-1] > endingIndex[len(endingIndex)-1] {
+			endingIndex = append(endingIndex, len(statement))
 		}
 
 		// checks whether all ending indexes are after their respective starting indexes
@@ -191,46 +156,6 @@ func returnBeginPrintIndices(statement string) ([]int, []int){
 	} else {
 		return startingIndex, endingIndex
 	}
-}
-
-// Returns the starting index and the ending index for all the if statements of the awk command
-func returnIfIndices(statement string) ([]int, []int){
-	var phrase string = `if`
-	var beginIndex []int
-	var endIndex []int
-	compiled := regexp.MustCompile(phrase)
-	index := compiled.FindAllStringIndex(statement, -1)
-	if len(index) > 0 {
-		for i := range index {
-			beginIndex = append(beginIndex, index[i][1]+2)
-		}
-
-		for iter, b := range []byte(statement) {
-			if b == 41 {
-				endIndex = append(endIndex, iter)
-			}
-		}
-
-		for true {
-			if endIndex[0] < beginIndex[0] {
-				endIndex = endIndex[1:]
-			} else {
-				break
-			}
-		}
-
-		var tracker = 0
-		var test []int
-		for i := 0; i < len(endIndex); i++ {
-			if endIndex[i] > beginIndex[tracker] {
-				tracker += 1
-				test = append(test, endIndex[i])
-			}
-		}
-		endIndex = test
-		return beginIndex, endIndex
-	}
-	return beginIndex, endIndex
 }
 
 // Used to divide the file to n equal parts that will be fed to the n different processors running in parallel
@@ -276,15 +201,15 @@ func divideFile(file *os.File, n int) []chunk {
 }
 
 // Responsible for communicating with the goAwk dependency. Returns the parsed awk Command
-func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string) ([]float64, bool) {
+func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFieldSeparator string, funcs map[string]interface{}) ([]float64, []bool, []string) {
 	config := &interp.Config{
 		Stdin: bytes.NewReader(chunk),
-		Vars:  []string{"OFS", fieldSeparator},
+		Vars: []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+		Funcs: funcs,
 	}
-	_, err, res, hasPrint := interp.ExecProgram(prog, config)
-	// fmt.Println(res)
+	_, err, res, natives, names := interp.ExecProgram(prog, config)
 	check(err)
-	return res, hasPrint
+	return res, natives, names
 }
 
 // Checks whether a string is contained inside a slice.
@@ -296,6 +221,35 @@ func isContained(e string, s []string) bool {
 	}
 	return false
 }
+
+func getFunctions() map[string]interface{} {
+
+	funcs := map[string]interface{}{
+		"min": func(num1 float64, num2 float64) float64 {
+			if (num1 < num2) {
+				return num1
+			}
+			return num2
+		},
+		"max": func(num1 float64, num2 float64) float64 {
+			if (num1 > num2) {
+				return num1
+			}
+			return num2
+		},
+		"and": func(bool1 bool, bool2 bool) bool {
+			return bool1 && bool2
+		},
+		"or": func(bool1 bool, bool2 bool) bool {
+			return bool1 || bool2
+		},
+		"xor": func(bool1 bool, bool2 bool) bool {
+			return bool1 != bool2
+		},
+	}
+	return funcs
+}
+
 
 func main() {
 
@@ -342,8 +296,6 @@ func main() {
 
 		beginStatement := newAwkCommand[:strings.Index(newAwkCommand, "}")+1]
 
-		// ifStartIndex, ifEndIndex := returnIfIndices(beginStatement)
-
 		printStartIndex, printEndIndex := returnBeginPrintIndices(beginStatement)
 
 		// If print exists in BEGIN
@@ -375,7 +327,9 @@ func main() {
 
 			for iter := 0; iter < len(printEndIndex); iter++ {
 				printvariable := beginStatement[printStartIndex[iter]:printEndIndex[iter]]
-				if string(printvariable[6]) == "\"" && string(printvariable[len(printvariable)-2]) == "\"" {
+				if string(printvariable[6]) == "\"" && string(printvariable[len(printvariable)-1]) == "\"" {
+					fmt.Printf(" %s ", printvariable[7:len(printvariable)-1])
+				} else if string(printvariable[6]) == "\"" && string(printvariable[len(printvariable)-2]) == "\"" {
 					fmt.Printf(" %s ", printvariable[7:len(printvariable)-2])
 				} else {
 					panic("Not provided a valid argument")
@@ -388,10 +342,102 @@ func main() {
 		eventualAwkCommand = newAwkCommand
 	}
 
-	channel := make(chan []string)
+	if strings.Contains(newAwkCommand, "END") { //Is it only BEGIN ? Or it can be Begin ?
+		var regexstring string = `[Ee][Nn][Dd]\s*{`
+		comp := regexp.MustCompile(regexstring)
+		indexEnd = comp.FindAllStringIndex(newAwkCommand, -1)
 
-	prog, err, varTypes := parser.ParseProgram([]byte(eventualAwkCommand), nil)
+		endStatement = newAwkCommand[indexEnd[0][0]:]
+
+		eventualAwkCommand = strings.ReplaceAll(eventualAwkCommand, endStatement, "")
+
+	} else {
+		eventualAwkCommand = newAwkCommand
+	}
+
+	funcs := getFunctions()
+
+	channel := make(chan *received)
+	config := &parser.ParserConfig {
+		Funcs: funcs,
+	}
+
+	init := eventualAwkCommand
+
+	bbb := eventualAwkCommand[strings.Index(newAwkCommand, "}")+1:indexEnd[0][0]]
+
+	printStartIndex, printEndIndex := returnBeginPrintIndices(bbb)
+
+	// If print exists in BEGIN
+	if len(printStartIndex) > 0 {
+		// checks that print operation have something to print
+		for i := 0; i < len(printEndIndex); i++ {
+			if printEndIndex[i] - printStartIndex[i] <=1 {
+				panic("Wrong syntax! Print No " + strconv.Itoa(i+1) + " does not contain anything")
+			}
+		}
+
+		// builds new string that contains everything except print statements
+		var str strings.Builder
+		str.WriteString(bbb[:printStartIndex[0]])
+		for iter := 1; iter < len(printEndIndex); iter++ {
+			str.WriteString(bbb[printEndIndex[iter-1]:printStartIndex[iter]])
+		}
+		str.WriteString(bbb[printEndIndex[len(printEndIndex)-1]:])
+
+		mystring := str.String()
+
+		// indexOfBegin := strings.Index(newAwkCommand, `}`)
+
+		if string(mystring[len(mystring)-1]) != "}" {
+			mystring = mystring + `}`
+		}
+
+		abc := newAwkCommand[:strings.Index(newAwkCommand, "}")+1]
+		def := newAwkCommand[indexEnd[0][0]:]
+		if len(strings.TrimSpace(mystring)) == 2 {
+			emptyStmt = true
+		}
+		eventualAwkCommand = abc + mystring + def
+	} else {
+		eventualAwkCommand = init
+	}
+
+	prog, err, varTypes := parser.ParseProgram([]byte(eventualAwkCommand), config)
 	check(err)
+
+	if len(printStartIndex) > 0 && len(prog.Actions) == 1 {
+		if len(prog.Actions) == 1 {
+			pp, err, _ = parser.ParseProgram([]byte(bbb), nil)
+			check(err)
+		} else {
+			pp, err, _ = parser.ParseProgram([]byte(bbb[printStartIndex[0]-1:printEndIndex[0]]), nil)
+			check(err)
+		}
+
+		for _, file := range args {
+			file := openFile(file)
+			defer file.Close()
+			text = append(text, divideFile(file, 1)[0].buff...)
+		}
+
+		input := bytes.NewReader(text)
+
+		configEnd := &interp.Config{
+			Stdin: input,
+			Output: nil,
+			Error:  ioutil.Discard,
+			Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+		}
+
+		_, err, _ = interp.ExecOneThread(pp, configEnd)
+		check(err)
+	}
+
+	funcnames := make([]string, 0, len(funcs))
+	for k := range funcs {
+			funcnames = append(funcnames, k)
+	}
 
 	if len(varTypes) > 1 {
 		panic("Cannot handle awk command that contains local variables")
@@ -416,6 +462,7 @@ func main() {
 		}
 	}
 
+
 	var myVariable []string
 	var actionArgument string
 	var proceed = true
@@ -424,14 +471,27 @@ func main() {
 	if len(prog.Actions) > 0 {
 		actionStatement := prog.Actions[0].Stmts.String()
 
-		flag := true
-		for _, char := range actionStatement {
-			if string(char) == "+" || string(char) == "-" {
-				flag = false
+		ok := false
+		if len(funcnames) > 0 {
+			actionSlice := strings.Fields(actionStatement)
+			for _, s := range actionSlice {
+				for _, n := range funcnames {
+					if strings.Contains(s, n) {
+						nameSlice = append(nameSlice, n)
+						ok = true
+					}
+				}
 			}
 		}
 
-		if flag || strings.Contains(actionStatement, "print") {
+		for _, char := range actionStatement {
+			if string(char) == "+" || string(char) == "-" {
+				ok = true
+			}
+		}
+
+		// If action statement does not contain a user defined function or an accumulation operation
+		if !ok && !strings.Contains(actionStatement, "print") && !emptyStmt && len(actionStatement) > 0 {
 			panic("Cannot handle awk commands that cannot be parallelized")
 		}
 
@@ -453,26 +513,7 @@ func main() {
 	var variable []string
 	for _, vvv := range myVariable {
 		if len([]byte(vvv)) > 0 {
-			var regexifstring string = `[iI][Ff][(]\s*`
-			comp := regexp.MustCompile(regexifstring)
-			found := comp.FindAllStringIndex(vvv, -1)
-			if len(found) > 0 {
-				var ris string = `\s*[)]\s*[{]\s*`
-				cp := regexp.MustCompile(ris)
-				f := cp.FindAllStringIndex(vvv, -1)
-				if len(f) > 0 {
-					if !(isContained(vvv[found[0][1]:f[0][0]], variable)) {
-						variable = append(variable, vvv[found[0][1]:f[0][0]])
-					}
-					if !(isContained(vvv[f[0][1]:], variable)) {
-						variable = append(variable, vvv[f[0][1]:])
-					}
-				}
-			}
-			matched, _ := regexp.MatchString(`[iI][Ff][(]\s*`, vvv)
-			if !(isContained(vvv, variable)) && !(matched){
-				variable = append(variable, vvv)
-			}
+			variable = append(variable, vvv)
 		}
 	}
 
@@ -482,21 +523,22 @@ func main() {
 		numberOfThreads = runtime.GOMAXPROCS(0)
 	}
 
-	array := make([][]string, numberOfThreads)
+	array := make([]*received, numberOfThreads)
 	for _, file := range args {
 		file := openFile(file)
 		defer file.Close()
 		chunks := divideFile(file, numberOfThreads)
+		// for _, c := range chunks {
+		// 	fmt.Println("BEGIN")
+		// 	fmt.Println(string(c.buff))
+		// 	fmt.Println("END")
+		// }
 		for i := 0; i < numberOfThreads; i++ {
-			go func(chunks []chunk, i int, r chan<- []string) {
-				var ar []string
+			go func(chunks []chunk, i int, r chan<- *received) {
 				chunk := chunks[i]
-				result, hasPrint := goAwk(chunk.buff, prog, fieldSeparator)
-				for _, r := range result {
-					ar = append(ar, strconv.FormatFloat(r, 'f', -1, 64))
-				}
-				ar = append(ar, strconv.FormatBool(hasPrint))
-				r <- ar
+				res, nat, names := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)
+				got := &received{results: res, nativeFunctions: nat, functionNames: names}
+				r <- got
 			}(chunks, i, channel)
 		}
 		for i := 0; i < numberOfThreads; i++ {
@@ -504,346 +546,65 @@ func main() {
 		}
 	}
 
-	// Responsible for receiving the result from each channel and accumulating it. Works sort of like a reduce operation for accumulation
+	// Performs the suitable Reduction
+	mapOfVariables := make(map[string]float64)
+	j := 0
+	boolSlice := array[0].nativeFunctions
 	sum := make(map[string]float64)
-	for _, ar := range array {
-		for iter, a := range ar {
-			if iter < len(ar)-1 {
-				num, err := strconv.ParseFloat(a, 64)
-				check(err)
-				sum[variable[iter]] += num
-			}
-		}
-		_, err = strconv.ParseBool(array[0][len(array[0])-1])
-		check(err)
-	}
-
-	if strings.Contains(eventualAwkCommand, "END") { //Is it only END ? Or it can be End ?
-
-		var regexendstring string = `[Ee][Nn][Dd]\s*{`
-		sent := regexp.MustCompile(regexendstring)
-		ind := sent.FindAllStringIndex(eventualAwkCommand, -1)
-
-		endStatement := eventualAwkCommand[ind[0][0]:len(eventualAwkCommand)]
-
-		ifStartIndex, ifEndIndex := returnIfIndices(endStatement)
-
-		printStartIndex, printEndIndex := returnPrintIndices(endStatement)
-
-		// checks that print operation have something to print
-		for i := 0; i < len(printEndIndex); i++ {
-			if printEndIndex[i] - printStartIndex[i] <=1 {
-				panic("Wrong syntax! Print No " + strconv.Itoa(i+1) + " does not contain anything")
-			}
-		}
-
-		var fl = true
-		var toprint string
-		var toprintslice []string
-
-		// Able to assess if statement and then print accordingly, used in END
-		for it, ind := range ifEndIndex {
-			for iter, index := range printStartIndex {
-
-				// fl flag used since we need to check if statement for only the first print statement after it
-				if ind < index && fl {
-					fl = false
-					for _, item := range variable {
-						ifStatement = strings.Fields(endStatement[ifStartIndex[it]:ifEndIndex[it]])
-
-						// If argument of if statement is a variable
-						if ifStatement[0] == item {
-							gg, err := strconv.ParseFloat(ifStatement[len(ifStatement)-1], 64)
-							if err != nil {
-								panic("Need to provide a number when comparing with a variableto compare with when using ")
-							}
-
-							// for != operator
-							if ifStatement[1] == `!=` {
-								if sum[item] != gg {
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							// for == operator
-							} else if ifStatement[1] == `==` {
-								if sum[item] == gg { //different types
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							// for >= operator
-							} else if ifStatement[1] == `>=` {
-								if sum[item] >= gg {
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							// for > operator
-							} else if ifStatement[1] == `>` {
-								if sum[item] > gg {
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							// for <= operator
-							} else if ifStatement[1] == `<=` {
-								if sum[item] <= gg {
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							// for < operator
-							} else if ifStatement[1] == `<` {
-								if sum[item] < gg {
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							}
-						// If argument of if statement is a string
-						} else if string(ifStatement[0][0]) == "\"" && string(ifStatement[0][len(ifStatement[0])-1]) == "\"" {
-							op := ifStatement[len(ifStatement)-1]
-
-							// So that things like if("a"<9) are not allowed. This is allowed if("a"<"9")
-							_, err := strconv.ParseFloat(op, 64)
-							if err == nil {
-								panic("Need to provide a string when comparing with a string")
-							}
-
-							if ifStatement[1] == `!=` {
-								if ifStatement[0] != op {
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							} else if ifStatement[1] == `==` {
-								if ifStatement[0] == op { //different types
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							} else if ifStatement[1] == `>=` {
-								if ifStatement[0] >= op {
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							} else if ifStatement[1] == `>` {
-								if ifStatement[0] > op {
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							} else if ifStatement[1] == `<=` {
-								if ifStatement[0] <= op {
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							} else if ifStatement[1] == `<` {
-								if ifStatement[0] < op {
-									toprint = endStatement[printStartIndex[iter]:printEndIndex[iter]]
-									toprintslice = strings.Fields(toprint)
-									for _, pr := range toprintslice {
-										// since comma is included in the first argument of print exclude it
-										if string(pr[len(pr)-1]) == `,` {
-											pr = pr[:len(pr)-1]
-										}
-										// used when argument to print is a string
-										if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-											fmt.Printf(" %s ", pr[1:len(pr)-1])
-
-										// used when arggument to print is a variable
-										} else if item == pr {
-											fmt.Printf(" %d ", int(sum[item]))
-										}
-									}
-								}
-							}
+	if len(variable) > 0 {
+		for i := 0; i < len(boolSlice); i ++ {
+			if boolSlice[i] { //means we deal with native function
+				if nameSlice[j] == "min" {
+					min = array[0].results[j]
+					for _, ar := range array {
+						if ar.results[j] < min {
+							min = ar.results[j]
 						}
 					}
+					mapOfVariables[variable[i]] = min
+				} else if nameSlice[j] == "max" {
+					max = array[0].results[j]
+					for _, ar := range array {
+						if ar.results[j] > max {
+							max = ar.results[j]
+						}
+					}
+					mapOfVariables[variable[i]] = max
 				}
-			}
-			fl = true
-		}
-
-		// find the index of the print statements that do not contain an if clause
-		var printindices []int
-		for iter, ind := range printStartIndex {
-			if len(ifEndIndex) > 0 {
-				if ind > ifEndIndex[len(ifEndIndex)-1] {
-					printindices = append(printindices, iter)
-				}
+				j += 1
 			} else {
-				printindices = append(printindices, iter)
-			}
-		}
-
-		// since the first corresponds to the last if statement
-		if len(ifEndIndex) > 0 {
-			printindices = printindices[1:]
-		}
-
-		// for each print assess whether it contains a string or a variable and print accordingly
-		for _, ind := range printindices {
-			toprint = endStatement[printStartIndex[ind]:printEndIndex[ind]]
-			toprintslice = strings.Fields(toprint)
-			for _, pr := range toprintslice {
-				if string(pr[len(pr)-1]) == `,` {
-					pr = pr[:len(pr)-1]
-				}
-				if string(pr[0]) == "\"" && string(pr[len(pr)-1]) == "\"" {
-					fmt.Printf(" %s ", pr[1:len(pr)-1])
-				} else if isContained(pr, variable) {
-					fmt.Printf(" %d ", int(sum[pr]))
+				for _, ar := range array {
+					sum[variable[i]] += ar.results[i]
 				}
 			}
 		}
 	}
 
-	fmt.Println()
+	end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
+	check(err)
+
+	for _, v := range variable {
+		end.Scalars[v] = int(sum[v])
+	}
+
+	keys := make([]string, 0, len(end.Scalars))
+  for k := range end.Scalars {
+		keys = append(keys, k)
+	}
+
+	for _, k := range keys {
+		end.Scalars[k] = int(mapOfVariables[k])
+	}
+
+	input := bytes.NewReader([]byte("foo bar\n\nbaz buz"))
+	configEnd := &interp.Config{
+		Stdin: input,
+		Output: nil,
+		Error:  ioutil.Discard,
+		Vars:   []string{"OFS", " ", "FS", " "},
+		Funcs: funcs,
+	}
+
+	_, err, _ = interp.ExecOneThread(end, configEnd)
+	check(err)
 }
