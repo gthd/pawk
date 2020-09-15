@@ -56,12 +56,19 @@ var (
 	emptyStmt            bool
 	text                 []byte
 	pp                   *parser.Program
+	hasEnd 								bool
+	hasBegin bool
+	bbb string
+	associativeValues map[string]map[string]float64
+	associativeValue map[string]float64
+	associativeArrays map[int]map[string]float64
 )
 
 type received struct {
 	results         []float64
 	nativeFunctions []bool
 	functionNames   []string
+	associativeArray map[string]float64
 }
 
 // Used to parse input arguments given by the user from console
@@ -200,15 +207,15 @@ func divideFile(file *os.File, n int) []chunk {
 }
 
 // Responsible for communicating with the goAwk dependency. Returns the parsed awk Command
-func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFieldSeparator string, funcs map[string]interface{}) ([]float64, []bool, []string) {
+func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFieldSeparator string, funcs map[string]interface{}) ([]float64, []bool, []string, map[string]float64) {
 	config := &interp.Config{
 		Stdin: bytes.NewReader(chunk),
 		Vars:  []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
 		Funcs: funcs,
 	}
-	_, err, res, natives, names := interp.ExecProgram(prog, config)
+	_, err, res, natives, names, arrays := interp.ExecProgram(prog, config)
 	check(err)
-	return res, natives, names
+	return res, natives, names, arrays
 }
 
 // Checks whether a string is contained inside a slice.
@@ -282,7 +289,7 @@ func main() {
 	// OR BEGIN {emp=1 ; print "cndckd" ; print "kcndkc"}
 	if strings.Contains(newAwkCommand, "BEGIN") { //Is it only BEGIN ? Or it can be Begin ?
 		// beginStatement := prog.Begin[0].String()
-
+		hasBegin = true
 		beginStatement := newAwkCommand[:strings.Index(newAwkCommand, "}")+1]
 
 		printStartIndex, printEndIndex := returnBeginPrintIndices(beginStatement)
@@ -331,17 +338,19 @@ func main() {
 		eventualAwkCommand = newAwkCommand
 	}
 
+	// Remove the END statement gets handled on its own at the end
 	if strings.Contains(newAwkCommand, "END") { //Is it only BEGIN ? Or it can be Begin ?
+		hasEnd = true
 		var regexstring = `[Ee][Nn][Dd]\s*{`
 		comp := regexp.MustCompile(regexstring)
-		indexEnd = comp.FindAllStringIndex(newAwkCommand, -1)
+		indexEnd = comp.FindAllStringIndex(eventualAwkCommand, -1)
 
-		endStatement = newAwkCommand[indexEnd[0][0]:]
+		endStatement = eventualAwkCommand[indexEnd[0][0]:]
 
 		eventualAwkCommand = strings.ReplaceAll(eventualAwkCommand, endStatement, "")
 
 	} else {
-		eventualAwkCommand = newAwkCommand
+		eventualAwkCommand = eventualAwkCommand
 	}
 
 	funcs := getFunctions()
@@ -352,12 +361,19 @@ func main() {
 	}
 
 	init := eventualAwkCommand
-
-	bbb := eventualAwkCommand[strings.Index(newAwkCommand, "}")+1 : indexEnd[0][0]]
+	if hasEnd && hasBegin {
+		bbb = eventualAwkCommand[strings.Index(eventualAwkCommand, "}")+1 : indexEnd[0][0]]
+	} else if hasEnd && !hasBegin {
+		bbb = eventualAwkCommand[:indexEnd[0][0]]
+	} else if hasBegin && !hasEnd {
+		bbb = eventualAwkCommand[strings.Index(eventualAwkCommand, "}")+1:]
+	} else {
+		bbb = eventualAwkCommand
+	}
 
 	printStartIndex, printEndIndex := returnBeginPrintIndices(bbb)
 
-	// If print exists in BEGIN
+	// Responsible for removing print statements from action statement
 	if len(printStartIndex) > 0 {
 		// checks that print operation have something to print
 		for i := 0; i < len(printEndIndex); i++ {
@@ -382,12 +398,23 @@ func main() {
 			mystring = mystring + `}`
 		}
 
-		abc := newAwkCommand[:strings.Index(newAwkCommand, "}")+1]
-		def := newAwkCommand[indexEnd[0][0]:]
 		if len(strings.TrimSpace(mystring)) == 2 {
 			emptyStmt = true
 		}
-		eventualAwkCommand = abc + mystring + def
+
+		if hasBegin && hasEnd {
+			abc := eventualAwkCommand[:strings.Index(eventualAwkCommand, "}")+1]
+			def := eventualAwkCommand[indexEnd[0][0]:]
+			eventualAwkCommand = abc + mystring + def
+		} else if hasBegin && !hasEnd {
+			abc := eventualAwkCommand[:strings.Index(eventualAwkCommand, "}")+1]
+			eventualAwkCommand = abc + mystring
+		} else if !hasBegin && hasEnd {
+			def := newAwkCommand[indexEnd[0][0]:]
+			eventualAwkCommand = mystring + def
+		} else if !hasBegin && !hasEnd {
+			eventualAwkCommand = mystring
+		}
 	} else {
 		eventualAwkCommand = init
 	}
@@ -395,6 +422,7 @@ func main() {
 	prog, err, varTypes := parser.ParseProgram([]byte(eventualAwkCommand), config)
 	check(err)
 
+	// Responsible for executing the print statements that exist in the action statement. Uses one thread since print cannot be parallelised
 	if len(printStartIndex) > 0 && len(prog.Actions) == 1 {
 		if len(prog.Actions) == 1 {
 			pp, err, _ = parser.ParseProgram([]byte(bbb), nil)
@@ -419,7 +447,7 @@ func main() {
 			Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
 		}
 
-		_, err, _ = interp.ExecOneThread(pp, configEnd)
+		_, err, _ = interp.ExecOneThread(pp, configEnd, associativeArrays)
 		check(err)
 	}
 
@@ -455,7 +483,7 @@ func main() {
 	var actionArgument string
 	var proceed = true
 
-	// Used for ensuring that only accumulation operations are allowed in action statements. Print operations not allowed since they cannot be parallelised
+	// Used for ensuring that only accumulation and assignment operations are allowed in action statements.
 	if len(prog.Actions) > 0 {
 		actionStatement := prog.Actions[0].Stmts.String()
 
@@ -473,11 +501,11 @@ func main() {
 		}
 
 		for _, char := range actionStatement {
-			if string(char) == "+" || string(char) == "-" {
+			if string(char) == "+" || string(char) == "-" || string(char) == "="{
 				ok = true
 			}
 		}
-
+		_ = ok
 		// If action statement does not contain a user defined function or an accumulation operation
 		if !ok && !strings.Contains(actionStatement, "print") && !emptyStmt && len(actionStatement) > 0 {
 			panic("Cannot handle awk commands that cannot be parallelized")
@@ -524,8 +552,9 @@ func main() {
 		for i := 0; i < numberOfThreads; i++ {
 			go func(chunks []chunk, i int, r chan<- *received) {
 				chunk := chunks[i]
-				res, nat, names := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)
-				got := &received{results: res, nativeFunctions: nat, functionNames: names}
+				res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)				
+				fmt.Println(arrays)
+				got := &received{results: res, nativeFunctions: nat, functionNames: names, associativeArray: arrays}
 				r <- got
 			}(chunks, i, channel)
 		}
@@ -538,7 +567,6 @@ func main() {
 	mapOfVariables := make(map[string]float64)
 	j := 0
 	boolSlice := array[0].nativeFunctions
-	sum := make(map[string]float64)
 	if len(variable) > 0 {
 		for i := 0; i < len(boolSlice); i++ {
 			if boolSlice[i] { //means we deal with native function
@@ -562,7 +590,24 @@ func main() {
 				j++
 			} else {
 				for _, ar := range array {
-					sum[variable[i]] += ar.results[i]
+					mapOfVariables[variable[i]] += ar.results[i]
+				}
+			}
+		}
+		if len(array[0].associativeArray) > 0 {
+			associativeValue = make(map[string]float64)
+			associativeValues = make(map[string]map[string]float64)
+			for i:=0; i < len(variable); i++ {
+				match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
+				if match {
+					for _, ar := range array {
+						for k := range ar.associativeArray {
+							associativeValue[k] += ar.associativeArray[k]
+							// associativeValues[variable[i]][k] += ar.associativeArray[k]
+						}
+					}
+					variable[i] = variable[i][:strings.Index(variable[i], "[")]
+					associativeValues[variable[i]] = associativeValue
 				}
 			}
 		}
@@ -571,9 +616,26 @@ func main() {
 	end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
 	check(err)
 
-	for _, v := range variable {
-		end.Scalars[v] = int(sum[v])
+	arrayKeys := make([]string, 0, len(end.Arrays))
+	for k := range end.Arrays {
+		arrayKeys = append(arrayKeys, k)
 	}
+
+	associativeArrays = make(map[int]map[string]float64)
+
+	for i, k := range arrayKeys {
+		if k == "ARGV" {
+			associativeArrays[i] = make(map[string]float64)
+		} else {
+			for _, vf := range variable {
+				if vf == k {
+					associativeArrays[i] = associativeValues[k]
+				}
+			}
+		}
+	}
+
+	fmt.Println(associativeArrays)
 
 	keys := make([]string, 0, len(end.Scalars))
 	for k := range end.Scalars {
@@ -584,6 +646,7 @@ func main() {
 		end.Scalars[k] = int(mapOfVariables[k])
 	}
 
+
 	input := bytes.NewReader([]byte("foo bar\n\nbaz buz"))
 	configEnd := &interp.Config{
 		Stdin:  input,
@@ -593,6 +656,6 @@ func main() {
 		Funcs:  funcs,
 	}
 
-	_, err, _ = interp.ExecOneThread(end, configEnd)
+	_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
 	check(err)
 }
