@@ -24,8 +24,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gthd/newgoawk/interp"
-	"github.com/gthd/newgoawk/parser"
+	"github.com/gthd/goawk/interp"
+	"github.com/gthd/goawk/parser"
 	"github.com/gthd/helper"
 	"github.com/pborman/getopt/v2"
 )
@@ -544,11 +544,11 @@ func main() {
 		file := openFile(file)
 		defer file.Close()
 		chunks := divideFile(file, numberOfThreads)
-		for _, c := range chunks {
-			fmt.Println("BEGIN")
-			fmt.Println(string(c.buff))
-			fmt.Println("END")
-		}
+		// for _, c := range chunks {
+		// 	fmt.Println("BEGIN")
+		// 	fmt.Println(string(c.buff))
+		// 	fmt.Println("END")
+		// }
 		for i := 0; i < numberOfThreads; i++ {
 			go func(chunks []chunk, i int, r chan<- *received) {
 				chunk := chunks[i]
