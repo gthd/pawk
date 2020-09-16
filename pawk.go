@@ -553,6 +553,7 @@ func main() {
 			go func(chunks []chunk, i int, r chan<- *received) {
 				chunk := chunks[i]
 				res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)
+				// fmt.Println(res)
 				got := &received{results: res, nativeFunctions: nat, functionNames: names, associativeArray: arrays}
 				r <- got
 			}(chunks, i, channel)
@@ -614,13 +615,14 @@ func main() {
 					}
 					variable[i] = variable[i][:strings.Index(variable[i], "[")]
 					associativeValues[variable[i]] = associativeValue
-				} else {
-					for _, ar := range array {
-						for k := range ar.associativeArray {
-							mapOfVariables[variable[i]] += ar.associativeArray[k]
-						}
-					}
 				}
+				// } else {
+				// 	for _, ar := range array {
+				// 		for k := range ar.associativeArray {
+				// 			mapOfVariables[variable[i]] += ar.associativeArray[k]
+				// 		}
+				// 	}
+				// }
 			}
 		}
 	}
@@ -653,7 +655,7 @@ func main() {
 	}
 
 	for _, k := range keys {
-		end.Scalars[k] = int(mapOfVariables[k])
+		end.Scalars[k] = mapOfVariables[k]
 	}
 
 
