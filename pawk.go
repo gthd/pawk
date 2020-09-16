@@ -24,8 +24,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gthd/goawk/interp"
-	"github.com/gthd/goawk/parser"
+	"github.com/gthd/newgoawk/interp"
+	"github.com/gthd/newgoawk/parser"
 	"github.com/gthd/helper"
 	"github.com/pborman/getopt/v2"
 )
@@ -544,16 +544,15 @@ func main() {
 		file := openFile(file)
 		defer file.Close()
 		chunks := divideFile(file, numberOfThreads)
-		// for _, c := range chunks {
-		// 	fmt.Println("BEGIN")
-		// 	fmt.Println(string(c.buff))
-		// 	fmt.Println("END")
-		// }
+		for _, c := range chunks {
+			fmt.Println("BEGIN")
+			fmt.Println(string(c.buff))
+			fmt.Println("END")
+		}
 		for i := 0; i < numberOfThreads; i++ {
 			go func(chunks []chunk, i int, r chan<- *received) {
 				chunk := chunks[i]
-				res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)				
-				fmt.Println(arrays)
+				res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)
 				got := &received{results: res, nativeFunctions: nat, functionNames: names, associativeArray: arrays}
 				r <- got
 			}(chunks, i, channel)
@@ -562,6 +561,13 @@ func main() {
 			array[i] = <-channel
 		}
 	}
+
+	// for i:= 0; i < numberOfThreads; i++ {
+	// 	fmt.Println(array[i].results)
+	// 	fmt.Println(array[i].nativeFunctions)
+	// 	fmt.Println(array[i].functionNames)
+	// 	fmt.Println(array[i].associativeArray)
+	// }
 
 	// Performs the suitable Reduction
 	mapOfVariables := make(map[string]float64)
@@ -608,6 +614,12 @@ func main() {
 					}
 					variable[i] = variable[i][:strings.Index(variable[i], "[")]
 					associativeValues[variable[i]] = associativeValue
+				} else {
+					for _, ar := range array {
+						for k := range ar.associativeArray {
+							mapOfVariables[variable[i]] += ar.associativeArray[k]
+						}
+					}
 				}
 			}
 		}
@@ -634,8 +646,6 @@ func main() {
 			}
 		}
 	}
-
-	fmt.Println(associativeArrays)
 
 	keys := make([]string, 0, len(end.Scalars))
 	for k := range end.Scalars {
