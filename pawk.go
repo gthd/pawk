@@ -23,6 +23,9 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"log"
+	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/gthd/goawk/interp"
 	"github.com/gthd/goawk/parser"
@@ -258,6 +261,11 @@ func getFunctions() map[string]interface{} {
 }
 
 func main() {
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+	
 	getopt.Parse()
 	args := getopt.Args()
 

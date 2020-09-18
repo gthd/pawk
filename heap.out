@@ -1,0 +1,21 @@
+(pprof) Showing nodes accounting for 7.31GB, 100% of 7.31GB total
+Dropped 7 nodes (cum <= 0.04GB)
+      flat  flat%   sum%        cum   cum%
+    7.31GB   100%   100%     7.31GB   100%  main.divideFile
+         0     0%   100%     7.31GB   100%  main.main
+         0     0%   100%     7.31GB   100%  runtime.main
+(pprof) Total: 7.31GB
+ROUTINE ======================== main.divideFile in C:\Users\George\Desktop\Github\pawk\pawk.go
+    7.31GB     7.31GB (flat, cum)   100% of Total
+         .          .    180:
+         .          .    181:		//In this way we check that the chunk does not end just before new line
+         .          .    182:		bytesToRead = defaultSize + (bytesToRead - end) + 1
+         .          .    183:
+         .          .    184:		//the byte length that gets handled by every thread
+    7.31GB     7.31GB    185:		b := make([]byte, bytesToRead)
+         .          .    186:		textBytes, err := file.Read(b)
+         .          .    187:		check(err)
+         .          .    188:		_ = textBytes
+         .          .    189:		_ = o
+         .          .    190:		for i := bytesToRead - 1; i > 0; i-- {
+(pprof) 
