@@ -23,9 +23,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"log"
-	"net/http"
-	_ "net/http/pprof"
 
 	"github.com/gthd/goawk/interp"
 	"github.com/gthd/goawk/parser"
@@ -169,7 +166,7 @@ func returnBeginPrintIndices(statement string) ([]int, []int) {
 
 // Used to divide the file to n equal parts that will be fed to the n different processors running in parallel
 func divideFile(file *os.File, n int) []chunk {
-	chunk := make([]chunk, n)	
+	chunk := make([]chunk, n)
 	o := int64(0)
 	bytesToRead := 0
 	end := 0
@@ -256,10 +253,6 @@ func getFunctions() map[string]interface{} {
 }
 
 func main() {
-
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
 
 	getopt.Parse()
 	args := getopt.Args()
