@@ -219,6 +219,15 @@ func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFiel
 }
 
 // Checks whether a string is contained inside a slice.
+func isContained(s string, slice []string) bool {
+	flag := false
+	for _, k := range slice {
+		if k == s {
+			flag = true
+		}
+	}
+	return flag
+}
 
 func getFunctions() map[string]interface{} {
 
@@ -374,7 +383,7 @@ func main() {
 	printStartIndex, printEndIndex := returnBeginPrintIndices(bbb)
 
 	// Responsible for removing print statements from action statement
-	if len(printStartIndex) > 0 {
+	if len(printStartIndex) > 0 && !strings.Contains(eventualAwkCommand, "for") {
 		// checks that print operation have something to print
 		for i := 0; i < len(printEndIndex); i++ {
 			if printEndIndex[i]-printStartIndex[i] <= 1 {
@@ -423,7 +432,7 @@ func main() {
 	check(err)
 
 	// Responsible for executing the print statements that exist in the action statement. Uses one thread since print cannot be parallelised
-	if len(printStartIndex) > 0 && len(prog.Actions) == 1 {
+	if len(printStartIndex) > 0 && len(prog.Actions) == 1 && !strings.Contains(eventualAwkCommand, "for"){
 		if len(prog.Actions) == 1 {
 			pp, err, _ = parser.ParseProgram([]byte(bbb), nil)
 			check(err)
@@ -528,6 +537,12 @@ func main() {
 	// checks that there are not empty variables
 	var variable []string
 	for _, vvv := range myVariable {
+		if isContained(vvv, variable) {
+			continue;
+		}
+		if strings.Contains(vvv, "for") {
+			continue;
+		}
 		if len([]byte(vvv)) > 0 {
 			variable = append(variable, vvv)
 		}
@@ -553,7 +568,7 @@ func main() {
 			go func(chunks []chunk, i int, r chan<- *received) {
 				chunk := chunks[i]
 				res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)
-				// fmt.Println(res)
+				// fmt.Println(arrays)
 				got := &received{results: res, nativeFunctions: nat, functionNames: names, associativeArray: arrays}
 				r <- got
 			}(chunks, i, channel)
@@ -595,11 +610,13 @@ func main() {
 					mapOfVariables[variable[i]] = max
 				}
 				j++
-			} else {
-				for _, ar := range array {
-					mapOfVariables[variable[i]] += ar.results[i]
-				}
-			}
+			// } else {
+			// 	for _, ar := range array {
+			// 		// fmt.Println(ar.results[i])
+			// 		mapOfVariables[variable[i]] += ar.results[i]
+			// 		// fmt.Println("K")
+			// 	}
+			// }
 		}
 		if len(array[0].associativeArray) > 0 {
 			associativeValue = make(map[string]float64)
@@ -615,14 +632,14 @@ func main() {
 					}
 					variable[i] = variable[i][:strings.Index(variable[i], "[")]
 					associativeValues[variable[i]] = associativeValue
+				} else {
+						for _, ar := range array {
+							for k := range ar.associativeArray {
+								mapOfVariables[variable[i]] += ar.associativeArray[k]
+							}
+						}
+					}
 				}
-				// } else {
-				// 	for _, ar := range array {
-				// 		for k := range ar.associativeArray {
-				// 			mapOfVariables[variable[i]] += ar.associativeArray[k]
-				// 		}
-				// 	}
-				// }
 			}
 		}
 	}
