@@ -169,8 +169,7 @@ func returnBeginPrintIndices(statement string) ([]int, []int) {
 
 // Used to divide the file to n equal parts that will be fed to the n different processors running in parallel
 func divideFile(file *os.File, n int) []chunk {
-	chunk := make([]chunk, n)
-	var data string
+	chunk := make([]chunk, n)	
 	o := int64(0)
 	bytesToRead := 0
 	end := 0
@@ -183,9 +182,8 @@ func divideFile(file *os.File, n int) []chunk {
 
 		//the byte length that gets handled by every thread
 		b := make([]byte, bytesToRead)
-		textBytes, err := file.Read(b)
+		_, err := file.Read(b)
 		check(err)
-		_ = textBytes
 		_ = o
 		for i := bytesToRead - 1; i > 0; i-- {
 			if string(b[i]) == "\n" {
@@ -197,12 +195,9 @@ func divideFile(file *os.File, n int) []chunk {
 
 			//For all threads other than the first, start from position 1 to exclude \n at the beginning of each chunk
 			chunk[thread].buff = b[1:end]
-			data = string(b[1:end])
 		} else {
 			chunk[thread].buff = b[:end]
-			data = string(b[:end])
 		}
-		_ = data
 		o, err = file.Seek(o+int64(end), 0)
 		check(err)
 	}
@@ -265,7 +260,7 @@ func main() {
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
-	
+
 	getopt.Parse()
 	args := getopt.Args()
 
@@ -576,7 +571,6 @@ func main() {
 			go func(chunks []chunk, i int, r chan<- *received) {
 				chunk := chunks[i]
 				res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)
-				// fmt.Println(arrays)
 				got := &received{results: res, nativeFunctions: nat, functionNames: names, associativeArray: arrays}
 				r <- got
 			}(chunks, i, channel)
@@ -618,13 +612,13 @@ func main() {
 					mapOfVariables[variable[i]] = max
 				}
 				j++
-			// } else {
-			// 	for _, ar := range array {
-			// 		// fmt.Println(ar.results[i])
-			// 		mapOfVariables[variable[i]] += ar.results[i]
-			// 		// fmt.Println("K")
-			// 	}
-			// }
+			} else {
+				for _, ar := range array {
+					// fmt.Println(ar.results[i])
+					mapOfVariables[variable[i]] += ar.results[i]
+					// fmt.Println("K")
+				}
+			}
 		}
 		if len(array[0].associativeArray) > 0 {
 			associativeValue = make(map[string]float64)
@@ -641,16 +635,18 @@ func main() {
 					variable[i] = variable[i][:strings.Index(variable[i], "[")]
 					associativeValues[variable[i]] = associativeValue
 				} else {
-						for _, ar := range array {
-							for k := range ar.associativeArray {
-								mapOfVariables[variable[i]] += ar.associativeArray[k]
+						if mapOfVariables[variable[i]] == float64(0) {
+							for _, ar := range array {
+								for k := range ar.associativeArray {
+									mapOfVariables[variable[i]] += ar.associativeArray[k]
+								}
 							}
 						}
 					}
-				}
 			}
 		}
 	}
+
 
 	end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
 	check(err)
