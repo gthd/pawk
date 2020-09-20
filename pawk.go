@@ -365,9 +365,7 @@ func main() {
 
 		eventualAwkCommand = strings.ReplaceAll(eventualAwkCommand, endStatement, "")
 
-	} else {
-		eventualAwkCommand = eventualAwkCommand
-	}
+	} 
 
 	funcs := getFunctions()
 
@@ -622,7 +620,7 @@ func main() {
 	// 	fmt.Println(array[i].functionNames)
 	// 	fmt.Println(array[i].associativeArray)
 	// }
-	fmt.Println("LL")
+
 	// Performs the suitable Reduction
 	mapOfVariables := make(map[string]float64)
 	j := 0
@@ -656,34 +654,38 @@ func main() {
 					}
 				}
 			}
-		} else {
-			if len(array[0].associativeArray) > 0 {
-				associativeValue = make(map[string]float64)
-				associativeValues = make(map[string]map[string]float64)
-				for i:=0; i < len(variable); i++ {
-					match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
-					if match {
-						for _, ar := range array {
-							for k := range ar.associativeArray {
-								associativeValue[k] += ar.associativeArray[k]
-								// associativeValues[variable[i]][k] += ar.associativeArray[k]
-							}
+		}
+	}
+
+
+	if len(variable) > 0 {
+		if len(array[0].associativeArray) > 0 {
+			associativeValue = make(map[string]float64)
+			associativeValues = make(map[string]map[string]float64)
+			for i:=0; i < len(variable); i++ {
+				match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
+				if match {
+					for _, ar := range array {
+						for k := range ar.associativeArray {
+							associativeValue[k] += ar.associativeArray[k]
+							// associativeValues[variable[i]][k] += ar.associativeArray[k]
 						}
-						variable[i] = variable[i][:strings.Index(variable[i], "[")]
-						associativeValues[variable[i]] = associativeValue
-					} else {
-							if mapOfVariables[variable[i]] == float64(0) {
-								for _, ar := range array {
-									for k := range ar.associativeArray {
-										mapOfVariables[variable[i]] += ar.associativeArray[k]
-									}
+					}
+					variable[i] = variable[i][:strings.Index(variable[i], "[")]
+					associativeValues[variable[i]] = associativeValue
+				} else {
+						if mapOfVariables[variable[i]] == float64(0) {
+							for _, ar := range array {
+								for k := range ar.associativeArray {
+									mapOfVariables[variable[i]] += ar.associativeArray[k]
 								}
 							}
 						}
-				}
+					}
 			}
 		}
 	}
+
 
 
 	end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
