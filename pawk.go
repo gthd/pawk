@@ -21,6 +21,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"log"
@@ -257,7 +258,7 @@ func getFunctions() map[string]interface{} {
 }
 
 func main() {
-
+	debug.SetGCPercent(50)
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
