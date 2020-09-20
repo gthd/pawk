@@ -200,6 +200,7 @@ func divideFile(file *os.File, n int) []chunk {
 		}
 		o, err = file.Seek(o+int64(end), 0)
 		check(err)
+		// fmt.Println(chunk[thread].buff)
 	}
 	return chunk
 }
@@ -258,8 +259,8 @@ func getFunctions() map[string]interface{} {
 func main() {
 
 	go func() {
-        log.Println(http.ListenAndServe("localhost:6060", nil))
-  }()
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	getopt.Parse()
 	args := getopt.Args()
