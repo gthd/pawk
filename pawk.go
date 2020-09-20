@@ -489,7 +489,7 @@ func main() {
 		}
 		_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
 		check(err)
-		os.Exit(0)		
+		os.Exit(0)
 	}
 
 	// Used for creating the dump file in case the -d option is passed. Unlike gawk in case -d not provided with file then the dump file is not  written
@@ -622,7 +622,7 @@ func main() {
 	// 	fmt.Println(array[i].functionNames)
 	// 	fmt.Println(array[i].associativeArray)
 	// }
-
+	fmt.Println("LL")
 	// Performs the suitable Reduction
 	mapOfVariables := make(map[string]float64)
 	j := 0
