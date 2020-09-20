@@ -258,7 +258,9 @@ func getFunctions() map[string]interface{} {
 }
 
 func main() {
+
 	debug.SetGCPercent(50)
+
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
@@ -471,7 +473,23 @@ func main() {
 	}
 
 	if len(varTypes) > 1 {
-		panic("Cannot handle awk command that contains local variables")
+		oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
+		check(err)
+		for _, file := range args {
+			file := openFile(file)
+			defer file.Close()
+			text = append(text, divideFile(file, 1)[0].buff...)
+		}
+		input := bytes.NewReader(text)
+		oneThreadConfig := &interp.Config{
+			Stdin:  input,
+			Output: nil,
+			Error:  ioutil.Discard,
+			Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+		}
+		_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
+		check(err)
+		os.Exit(0)		
 	}
 
 	// Used for creating the dump file in case the -d option is passed. Unlike gawk in case -d not provided with file then the dump file is not  written
@@ -522,7 +540,23 @@ func main() {
 		_ = ok
 		// If action statement does not contain a user defined function or an accumulation operation
 		if !ok && !strings.Contains(actionStatement, "print") && !emptyStmt && len(actionStatement) > 0 {
-			panic("Cannot handle awk commands that cannot be parallelized")
+			oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
+			check(err)
+			for _, file := range args {
+				file := openFile(file)
+				defer file.Close()
+				text = append(text, divideFile(file, 1)[0].buff...)
+			}
+			input := bytes.NewReader(text)
+			oneThreadConfig := &interp.Config{
+				Stdin:  input,
+				Output: nil,
+				Error:  ioutil.Discard,
+				Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+			}
+			_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
+			check(err)
+			os.Exit(0)
 		}
 
 		// stores to myVariable slice all the variables that exist in the action Statement
@@ -594,57 +628,59 @@ func main() {
 	j := 0
 	boolSlice := array[0].nativeFunctions
 	if len(variable) > 0 {
-		for i := 0; i < len(boolSlice); i++ {
-			if boolSlice[i] { //means we deal with native function
-				if nameSlice[j] == "min" {
-					min = array[0].results[j]
-					for _, ar := range array {
-						if ar.results[j] < min {
-							min = ar.results[j]
+		if len(boolSlice) == len(variable) {
+			for i := 0; i < len(boolSlice); i++ {
+				if boolSlice[i] { //means we deal with native function
+					if nameSlice[j] == "min" {
+						min = array[0].results[j]
+						for _, ar := range array {
+							if ar.results[j] < min {
+								min = ar.results[j]
+							}
 						}
-					}
-					mapOfVariables[variable[i]] = min
-				} else if nameSlice[j] == "max" {
-					max = array[0].results[j]
-					for _, ar := range array {
-						if ar.results[j] > max {
-							max = ar.results[j]
+						mapOfVariables[variable[i]] = min
+					} else if nameSlice[j] == "max" {
+						max = array[0].results[j]
+						for _, ar := range array {
+							if ar.results[j] > max {
+								max = ar.results[j]
+							}
 						}
+						mapOfVariables[variable[i]] = max
 					}
-					mapOfVariables[variable[i]] = max
-				}
-				j++
-			} else {
-				for _, ar := range array {
-					// fmt.Println(ar.results[i])
-					mapOfVariables[variable[i]] += ar.results[i]
-					// fmt.Println("K")
+					j++
+				} else {
+					for _, ar := range array {
+						mapOfVariables[variable[i]] += ar.results[i]
+						// fmt.Println("K")
+					}
 				}
 			}
-		}
-		if len(array[0].associativeArray) > 0 {
-			associativeValue = make(map[string]float64)
-			associativeValues = make(map[string]map[string]float64)
-			for i:=0; i < len(variable); i++ {
-				match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
-				if match {
-					for _, ar := range array {
-						for k := range ar.associativeArray {
-							associativeValue[k] += ar.associativeArray[k]
-							// associativeValues[variable[i]][k] += ar.associativeArray[k]
+		} else {
+			if len(array[0].associativeArray) > 0 {
+				associativeValue = make(map[string]float64)
+				associativeValues = make(map[string]map[string]float64)
+				for i:=0; i < len(variable); i++ {
+					match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
+					if match {
+						for _, ar := range array {
+							for k := range ar.associativeArray {
+								associativeValue[k] += ar.associativeArray[k]
+								// associativeValues[variable[i]][k] += ar.associativeArray[k]
+							}
 						}
-					}
-					variable[i] = variable[i][:strings.Index(variable[i], "[")]
-					associativeValues[variable[i]] = associativeValue
-				} else {
-						if mapOfVariables[variable[i]] == float64(0) {
-							for _, ar := range array {
-								for k := range ar.associativeArray {
-									mapOfVariables[variable[i]] += ar.associativeArray[k]
+						variable[i] = variable[i][:strings.Index(variable[i], "[")]
+						associativeValues[variable[i]] = associativeValue
+					} else {
+							if mapOfVariables[variable[i]] == float64(0) {
+								for _, ar := range array {
+									for k := range ar.associativeArray {
+										mapOfVariables[variable[i]] += ar.associativeArray[k]
+									}
 								}
 							}
 						}
-					}
+				}
 			}
 		}
 	}
