@@ -391,7 +391,7 @@ func main() {
 	printStartIndex, printEndIndex := returnBeginPrintIndices(bbb)
 
 	// Responsible for removing print statements from action statement
-	if len(printStartIndex) > 0 && !strings.Contains(eventualAwkCommand, "for") {
+	if len(printStartIndex) > 0 && !strings.Contains(eventualAwkCommand, "for") && !strings.Contains(eventualAwkCommand, "if") {
 		// checks that print operation have something to print
 		for i := 0; i < len(printEndIndex); i++ {
 			if printEndIndex[i]-printStartIndex[i] <= 1 {
@@ -489,9 +489,11 @@ func main() {
 			Output: nil,
 			Error:  ioutil.Discard,
 			Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+			Funcs:  funcs,
 		}
 		_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
 		check(err)
+		fmt.Println("KK")
 		os.Exit(0)
 	}
 
@@ -539,7 +541,7 @@ func main() {
 			}
 
 			for _, char := range actionStatement {
-				if string(char) == "+" || string(char) == "-" {
+				if string(char) == "+" || string(char) == "-"{
 					ok = true
 					operations = append(operations, "accumulation")
 				}
@@ -561,9 +563,11 @@ func main() {
 					Output: nil,
 					Error:  ioutil.Discard,
 					Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+					Funcs:  funcs,
 				}
 				_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
-				check(err)				
+				check(err)
+				fmt.Println("LL")
 				os.Exit(0)
 			}
 
@@ -715,7 +719,6 @@ func main() {
 				}
 			}
 		}
-		fmt.Println(mapOfVariables)
 	}
 
 	end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
