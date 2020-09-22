@@ -365,7 +365,7 @@ func main() {
 
 		eventualAwkCommand = strings.ReplaceAll(eventualAwkCommand, endStatement, "")
 
-	} 
+	}
 
 	funcs := getFunctions()
 
@@ -471,6 +471,7 @@ func main() {
 	}
 
 	if len(varTypes) > 1 {
+		fmt.Println("PP")
 		oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
 		check(err)
 		for _, file := range args {
@@ -624,24 +625,36 @@ func main() {
 	// Performs the suitable Reduction
 	mapOfVariables := make(map[string]float64)
 	j := 0
-	boolSlice := array[0].nativeFunctions
+	k := 0
+	for true {
+		if len(array[k].nativeFunctions) > 0 {
+			break
+		} else {
+			k += 1
+		}
+	}
+	boolSlice := array[k].nativeFunctions
 	if len(variable) > 0 {
 		if len(boolSlice) == len(variable) {
 			for i := 0; i < len(boolSlice); i++ {
 				if boolSlice[i] { //means we deal with native function
 					if nameSlice[j] == "min" {
-						min = array[0].results[j]
+						min = array[k].results[i]
 						for _, ar := range array {
-							if ar.results[j] < min {
-								min = ar.results[j]
+							if len(ar.results) > 0 {
+								if ar.results[i] < min {
+									min = ar.results[i]
+								}
 							}
 						}
 						mapOfVariables[variable[i]] = min
 					} else if nameSlice[j] == "max" {
-						max = array[0].results[j]
+						max = array[k].results[i]
 						for _, ar := range array {
-							if ar.results[j] > max {
-								max = ar.results[j]
+							if len(ar.results) > 0 {
+								if ar.results[i] > max {
+									max = ar.results[i]
+								}
 							}
 						}
 						mapOfVariables[variable[i]] = max
@@ -649,14 +662,14 @@ func main() {
 					j++
 				} else {
 					for _, ar := range array {
-						mapOfVariables[variable[i]] += ar.results[i]
-						// fmt.Println("K")
+						if len(ar.results) > 0 {
+							mapOfVariables[variable[i]] += ar.results[i]
+						}
 					}
 				}
 			}
 		}
 	}
-
 
 	if len(variable) > 0 {
 		if len(array[0].associativeArray) > 0 {
@@ -710,16 +723,15 @@ func main() {
 		}
 	}
 
-	keys := make([]string, 0, len(end.Scalars))
-	for k := range end.Scalars {
+	keys := make([]string, 0, len(mapOfVariables))
+	for k := range mapOfVariables {
 		keys = append(keys, k)
 	}
 
 	for _, k := range keys {
 		end.Scalars[k] = mapOfVariables[k]
 	}
-
-
+	
 	input := bytes.NewReader([]byte("foo bar\n\nbaz buz"))
 	configEnd := &interp.Config{
 		Stdin:  input,
