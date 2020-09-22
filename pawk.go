@@ -66,6 +66,7 @@ var (
 	associativeValues map[string]map[string]float64
 	associativeValue map[string]float64
 	associativeArrays map[int]map[string]float64
+	arraysPerFile map[int][]*received
 )
 
 type received struct {
@@ -169,7 +170,8 @@ func returnBeginPrintIndices(statement string) ([]int, []int) {
 }
 
 // Used to divide the file to n equal parts that will be fed to the n different processors running in parallel
-func divideFile(file *os.File, n int) []chunk {
+func divideFile(file *os.File, n int) ([]chunk, []int64) {
+	offsets := make([]int64, n)
 	chunk := make([]chunk, n)
 	o := int64(0)
 	bytesToRead := 0
@@ -201,17 +203,18 @@ func divideFile(file *os.File, n int) []chunk {
 		}
 		o, err = file.Seek(o+int64(end), 0)
 		check(err)
-		// fmt.Println(chunk[thread].buff)
+		offsets[thread] = o
 	}
-	return chunk
+	return chunk, offsets
 }
 
 // Responsible for communicating with the goAwk dependency. Returns the parsed awk Command
-func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFieldSeparator string, funcs map[string]interface{}) ([]float64, []bool, []string, map[string]float64) {
+func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFieldSeparator string, funcs map[string]interface{}, offset int64) ([]float64, []bool, []string, map[string]float64) {
 	config := &interp.Config{
 		Stdin: bytes.NewReader(chunk),
 		Vars:  []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
 		Funcs: funcs,
+		Offset: offset,
 	}
 	_, err, res, natives, names, arrays := interp.ExecProgram(prog, config)
 	check(err)
@@ -449,7 +452,8 @@ func main() {
 		for _, file := range args {
 			file := openFile(file)
 			defer file.Close()
-			text = append(text, divideFile(file, 1)[0].buff...)
+			fileText, _ := divideFile(file, 1)
+			text = append(text, fileText[0].buff...)
 		}
 
 		input := bytes.NewReader(text)
@@ -471,13 +475,13 @@ func main() {
 	}
 
 	if len(varTypes) > 1 {
-		fmt.Println("PP")
 		oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
 		check(err)
 		for _, file := range args {
 			file := openFile(file)
 			defer file.Close()
-			text = append(text, divideFile(file, 1)[0].buff...)
+			fileText, _ := divideFile(file, 1)
+			text = append(text, fileText[0].buff...)
 		}
 		input := bytes.NewReader(text)
 		oneThreadConfig := &interp.Config{
@@ -513,61 +517,67 @@ func main() {
 	var myVariable []string
 	var actionArgument string
 	var proceed = true
-
+	var operations []string
 	// Used for ensuring that only accumulation and assignment operations are allowed in action statements.
 	if len(prog.Actions) > 0 {
-		actionStatement := prog.Actions[0].Stmts.String()
+		for _, pat := range prog.Actions {
 
-		ok := false
-		if len(funcnames) > 0 {
-			actionSlice := strings.Fields(actionStatement)
-			for _, s := range actionSlice {
-				for _, n := range funcnames {
-					if strings.Contains(s, n) {
-						nameSlice = append(nameSlice, n)
-						ok = true
+			actionStatement := pat.Stmts.String()
+
+			ok := false
+			if len(funcnames) > 0 {
+				actionSlice := strings.Fields(actionStatement)
+				for _, s := range actionSlice {
+					for _, n := range funcnames {
+						if strings.Contains(s, n) {
+							nameSlice = append(nameSlice, n)
+							ok = true
+							operations = append(operations, "min/max")
+						}
 					}
 				}
 			}
-		}
 
-		for _, char := range actionStatement {
-			if string(char) == "+" || string(char) == "-" || string(char) == "="{
-				ok = true
+			for _, char := range actionStatement {
+				if string(char) == "+" || string(char) == "-" {
+					ok = true
+					operations = append(operations, "accumulation")
+				}
 			}
-		}
-		_ = ok
-		// If action statement does not contain a user defined function or an accumulation operation
-		if !ok && !strings.Contains(actionStatement, "print") && !emptyStmt && len(actionStatement) > 0 {
-			oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
-			check(err)
-			for _, file := range args {
-				file := openFile(file)
-				defer file.Close()
-				text = append(text, divideFile(file, 1)[0].buff...)
+			_ = ok
+			// If action statement does not contain a user defined function or an accumulation operation
+			if !ok && !strings.Contains(actionStatement, "print") && !emptyStmt && len(actionStatement) > 0 {
+				oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
+				check(err)
+				for _, file := range args {
+					file := openFile(file)
+					defer file.Close()
+					fileText, _ := divideFile(file, 1)
+					text = append(text, fileText[0].buff...)
+				}
+				input := bytes.NewReader(text)
+				oneThreadConfig := &interp.Config{
+					Stdin:  input,
+					Output: nil,
+					Error:  ioutil.Discard,
+					Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+				}
+				_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
+				check(err)				
+				os.Exit(0)
 			}
-			input := bytes.NewReader(text)
-			oneThreadConfig := &interp.Config{
-				Stdin:  input,
-				Output: nil,
-				Error:  ioutil.Discard,
-				Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
-			}
-			_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
-			check(err)
-			os.Exit(0)
-		}
 
-		// stores to myVariable slice all the variables that exist in the action Statement
-		for _, char := range actionStatement {
-			if string(char) == "+" || string(char) == "-" || string(char) == "=" && proceed {
-				myVariable = append(myVariable, actionArgument)
-				actionArgument = ""
-				proceed = false
-			} else if string(char) != " " && proceed {
-				actionArgument = actionArgument + string(char)
-			} else if uint64([]byte(string(char))[0]) == 10 {
-				proceed = true
+			// stores to myVariable slice all the variables that exist in the action Statement
+			for _, char := range actionStatement {
+				if string(char) == "+" || string(char) == "-" || string(char) == "=" && proceed {
+					myVariable = append(myVariable, actionArgument)
+					actionArgument = ""
+					proceed = false
+				} else if string(char) != " " && proceed {
+					actionArgument = actionArgument + string(char)
+				} else if uint64([]byte(string(char))[0]) == 10 {
+					proceed = true
+				}
 			}
 		}
 	}
@@ -593,10 +603,12 @@ func main() {
 	}
 
 	array := make([]*received, numberOfThreads)
+	arraysPerFile := make(map[int][]*received)
+	l := 0
 	for _, file := range args {
 		file := openFile(file)
 		defer file.Close()
-		chunks := divideFile(file, numberOfThreads)
+		chunks, offsets := divideFile(file, numberOfThreads)
 		// for _, c := range chunks {
 		// 	fmt.Println("BEGIN")
 		// 	fmt.Println(string(c.buff))
@@ -605,7 +617,7 @@ func main() {
 		for i := 0; i < numberOfThreads; i++ {
 			go func(chunks []chunk, i int, r chan<- *received) {
 				chunk := chunks[i]
-				res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)
+				res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs, offsets[i])
 				got := &received{results: res, nativeFunctions: nat, functionNames: names, associativeArray: arrays}
 				r <- got
 			}(chunks, i, channel)
@@ -613,6 +625,9 @@ func main() {
 		for i := 0; i < numberOfThreads; i++ {
 			array[i] = <-channel
 		}
+		arraysPerFile[l] = array
+		array = make([]*received, numberOfThreads)
+		l += 1
 	}
 
 	// for i:= 0; i < numberOfThreads; i++ {
@@ -624,82 +639,84 @@ func main() {
 
 	// Performs the suitable Reduction
 	mapOfVariables := make(map[string]float64)
-	j := 0
-	k := 0
-	for true {
-		if len(array[k].nativeFunctions) > 0 {
-			break
-		} else {
-			k += 1
+	for f:= 0; f < l; f++ {
+		array = arraysPerFile[f]
+		j := 0
+		k := 0
+		for true {
+			if len(array[k].nativeFunctions) > 0 {
+				break
+			} else {
+				k += 1
+			}
 		}
-	}
-	boolSlice := array[k].nativeFunctions
-	if len(variable) > 0 {
-		if len(boolSlice) == len(variable) {
-			for i := 0; i < len(boolSlice); i++ {
-				if boolSlice[i] { //means we deal with native function
-					if nameSlice[j] == "min" {
-						min = array[k].results[i]
-						for _, ar := range array {
-							if len(ar.results) > 0 {
-								if ar.results[i] < min {
-									min = ar.results[i]
+		boolSlice := array[k].nativeFunctions
+		if len(variable) > 0 {
+			if len(boolSlice) == len(variable) {
+				for i := 0; i < len(boolSlice); i++ {
+					if boolSlice[i] { //means we deal with native function
+						if nameSlice[j] == "min" {
+							min = array[k].results[i]
+							for _, ar := range array {
+								if len(ar.results) > 0 {
+									if ar.results[i] < min {
+										min = ar.results[i]
+									}
 								}
 							}
-						}
-						mapOfVariables[variable[i]] = min
-					} else if nameSlice[j] == "max" {
-						max = array[k].results[i]
-						for _, ar := range array {
-							if len(ar.results) > 0 {
-								if ar.results[i] > max {
-									max = ar.results[i]
+							mapOfVariables[variable[i]] = min
+						} else if nameSlice[j] == "max" {
+							max = array[k].results[i]
+							for _, ar := range array {
+								if len(ar.results) > 0 {
+									if ar.results[i] > max {
+										max = ar.results[i]
+									}
 								}
 							}
+							mapOfVariables[variable[i]] = max
 						}
-						mapOfVariables[variable[i]] = max
-					}
-					j++
-				} else {
-					for _, ar := range array {
-						if len(ar.results) > 0 {
-							mapOfVariables[variable[i]] += ar.results[i]
+						j++
+					} else {
+						for _, ar := range array {
+							if len(ar.results) > 0 {
+								mapOfVariables[variable[i]] += ar.results[i]
+							}
 						}
 					}
 				}
 			}
 		}
-	}
 
-	if len(variable) > 0 {
-		if len(array[0].associativeArray) > 0 {
-			associativeValue = make(map[string]float64)
-			associativeValues = make(map[string]map[string]float64)
-			for i:=0; i < len(variable); i++ {
-				match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
-				if match {
-					for _, ar := range array {
-						for k := range ar.associativeArray {
-							associativeValue[k] += ar.associativeArray[k]
-							// associativeValues[variable[i]][k] += ar.associativeArray[k]
+		if len(variable) > 0 {
+			if len(array[0].associativeArray) > 0 {
+				associativeValue = make(map[string]float64)
+				associativeValues = make(map[string]map[string]float64)
+				for i:=0; i < len(variable); i++ {
+					match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
+					if match {
+						for _, ar := range array {
+							for k := range ar.associativeArray {
+								associativeValue[k] += ar.associativeArray[k]
+								// associativeValues[variable[i]][k] += ar.associativeArray[k]
+							}
 						}
-					}
-					variable[i] = variable[i][:strings.Index(variable[i], "[")]
-					associativeValues[variable[i]] = associativeValue
-				} else {
-						if mapOfVariables[variable[i]] == float64(0) {
-							for _, ar := range array {
-								for k := range ar.associativeArray {
-									mapOfVariables[variable[i]] += ar.associativeArray[k]
+						variable[i] = variable[i][:strings.Index(variable[i], "[")]
+						associativeValues[variable[i]] = associativeValue
+					} else {
+							if mapOfVariables[variable[i]] == float64(0) {
+								for _, ar := range array {
+									for k := range ar.associativeArray {
+										mapOfVariables[variable[i]] += ar.associativeArray[k]
+									}
 								}
 							}
 						}
-					}
+				}
 			}
 		}
+		fmt.Println(mapOfVariables)
 	}
-
-
 
 	end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
 	check(err)
@@ -731,7 +748,7 @@ func main() {
 	for _, k := range keys {
 		end.Scalars[k] = mapOfVariables[k]
 	}
-	
+
 	input := bytes.NewReader([]byte("foo bar\n\nbaz buz"))
 	configEnd := &interp.Config{
 		Stdin:  input,
