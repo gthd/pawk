@@ -71,6 +71,11 @@ var (
 	flag bool
 	actionStatement string
 	okArray []bool
+	actions map[int]string
+	indexes []int
+	myVariable []string
+	actionArgument string
+	proceed = true
 )
 
 type received struct {
@@ -348,7 +353,7 @@ func main() {
 				} else if string(printvariable[6]) == "\"" && string(printvariable[len(printvariable)-2]) == "\"" {
 					fmt.Printf(" %s ", printvariable[7:len(printvariable)-2])
 				} else {
-					panic("Not provided a valid argument")
+					panic("Not provided a valid argument to print in BEGIN statement")
 				}
 			}
 		} else {
@@ -357,27 +362,19 @@ func main() {
 	} else {
 		eventualAwkCommand = newAwkCommand
 	}
+	fmt.Println(eventualAwkCommand)
 
-	// Remove the END statement gets handled on its own at the end
-	if strings.Contains(newAwkCommand, "END") { //Is it only BEGIN ? Or it can be Begin ?
+	// Remove the END statement, gets handled on its own at the end
+	if strings.Contains(newAwkCommand, "END") {
 		hasEnd = true
 		var regexstring = `[Ee][Nn][Dd]\s*{`
 		comp := regexp.MustCompile(regexstring)
 		indexEnd = comp.FindAllStringIndex(eventualAwkCommand, -1)
-
 		endStatement = eventualAwkCommand[indexEnd[0][0]:]
-
 		eventualAwkCommand = strings.ReplaceAll(eventualAwkCommand, endStatement, "")
-
 	}
 
-	funcs := getFunctions()
-
-	channel := make(chan *received)
-	config := &parser.ParserConfig{
-		Funcs: funcs,
-	}
-
+	// Removes BEGIN and END Statements from the initial AWK command
 	init := eventualAwkCommand
 	if hasEnd && hasBegin {
 		bbb = eventualAwkCommand[strings.Index(eventualAwkCommand, "}")+1 : indexEnd[0][0]]
@@ -389,11 +386,12 @@ func main() {
 		bbb = eventualAwkCommand
 	}
 
+	// Gets the indexes of the print functions in the action statements
 	printStartIndex, printEndIndex := returnBeginPrintIndices(bbb)
 
-	// Responsible for removing print statements from action statement
+	// Responsible for removing print statements from action statement and creating a new awk command that does not include them
 	if len(printStartIndex) > 0 && !strings.Contains(eventualAwkCommand, "for") {
-		// checks that print operation have something to print
+
 		for i := 0; i < len(printEndIndex); i++ {
 			if printEndIndex[i]-printStartIndex[i] <= 1 {
 				panic("Wrong syntax! Print No " + strconv.Itoa(i+1) + " does not contain anything")
@@ -410,8 +408,6 @@ func main() {
 
 		mystring := str.String()
 
-		// indexOfBegin := strings.Index(newAwkCommand, `}`)
-
 		if string(mystring[len(mystring)-1]) != "}" {
 			mystring = mystring + `}`
 		}
@@ -420,6 +416,7 @@ func main() {
 			emptyStmt = true
 		}
 
+		// Create new AWK command that does not contain the print statements
 		if hasBegin && hasEnd {
 			abc := eventualAwkCommand[:strings.Index(eventualAwkCommand, "}")+1]
 			def := eventualAwkCommand[indexEnd[0][0]:]
@@ -437,8 +434,61 @@ func main() {
 		eventualAwkCommand = init
 	}
 
-	fmt.Println(eventualAwkCommand)
-	//TO-DO FOR EACH ACTION STATEMENT CHECKING IF IT IS EMPTY AND THEN EXECUTING IN ONE THREAD 
+	// Responsible for distinguishing action statements in AWK commands that contains multiple blocks
+	actions = make(map[int]string)
+	for i, b := range []byte(eventualAwkCommand) {
+		if b == 10 {
+			indexes = append(indexes, i)
+		}
+	}
+
+	indexes = append(indexes, len([]byte(eventualAwkCommand)))
+	for i, _ := range indexes {
+		if i == 0 {
+			actions[i] = string([]byte(eventualAwkCommand)[:indexes[i]])
+		} else if i != len(indexes) -1 {
+			actions[i] = string([]byte(eventualAwkCommand)[indexes[i-1]:indexes[i]])
+		} else {
+			if len(strings.TrimSpace(string([]byte(eventualAwkCommand)[indexes[i-1]:]))) > 0 {
+				actions[i] = string([]byte(eventualAwkCommand)[indexes[i-1]:])
+			}
+		}
+	}
+
+	// Creates the config struct to be passed in GoAwk's Parser
+	funcs := getFunctions()
+	config := &parser.ParserConfig{
+		Funcs: funcs,
+	}
+
+	// Checks if an action statement contains an empty if operator, should be executed in one thread
+	for k := range actions {
+		actStatement := actions[k][strings.Index(actions[k], "{")+1:strings.Index(actions[k], "}")]
+		if strings.Contains(actStatement, "if") {
+			if len(strings.TrimSpace(actStatement[strings.Index(actStatement, ")")+1:])) == 0 {
+				fmt.Println("Command gets executed in one thread !")
+				oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
+				check(err)
+				for _, file := range args {
+					file := openFile(file)
+					defer file.Close()
+					text = append(text, divideFile(file, 1)[0].buff...)
+				}
+				input := bytes.NewReader(text)
+				oneThreadConfig := &interp.Config{
+					Stdin:  input,
+					Output: nil,
+					Error:  ioutil.Discard,
+					Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+					Funcs:  funcs,
+				}
+				_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
+				check(err)
+				os.Exit(0)
+			}
+		}
+	}
+
 
 	prog, err, varTypes := parser.ParseProgram([]byte(eventualAwkCommand), config)
 	check(err)
@@ -477,6 +527,7 @@ func main() {
 		funcnames = append(funcnames, k)
 	}
 
+	// In case a command contains local arguments then it cannot be parallelized, so it gets executed in one thread
 	if len(varTypes) > 1 {
 		oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
 		fmt.Println("Command gets executed in one thread !")
@@ -518,9 +569,6 @@ func main() {
 		}
 	}
 
-	var myVariable []string
-	var actionArgument string
-	var proceed = true
 	// Used for ensuring that only accumulation and assignment operations are allowed in action statements.
 	if len(prog.Actions) > 0 {
 		for _, pat := range prog.Actions {
@@ -587,28 +635,6 @@ func main() {
 			check(err)
 			os.Exit(0)
 		}
-
-	// 	if !emptyStmt && len(actionStatement) > 0 {
-	// 		fmt.Println("Command gets executed in one thread !")
-	// 		oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
-	// 		check(err)
-	// 		for _, file := range args {
-	// 			file := openFile(file)
-	// 			defer file.Close()
-	// 			text = append(text, divideFile(file, 1)[0].buff...)
-	// 		}
-	// 		input := bytes.NewReader(text)
-	// 		oneThreadConfig := &interp.Config{
-	// 			Stdin:  input,
-	// 			Output: nil,
-	// 			Error:  ioutil.Discard,
-	// 			Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
-	// 			Funcs:  funcs,
-	// 		}
-	// 		_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
-	// 		check(err)
-	// 		os.Exit(0)
-	// 	}
 	}
 
 	// checks that there are not empty variables
@@ -634,6 +660,7 @@ func main() {
 	array := make([]*received, numberOfThreads)
 	arraysPerFile := make(map[int][]*received)
 	l := 0
+	channel := make(chan *received)
 	for _, file := range args {
 		file := openFile(file)
 		defer file.Close()
