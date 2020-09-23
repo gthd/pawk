@@ -476,6 +476,7 @@ func main() {
 
 	if len(varTypes) > 1 {
 		oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
+		fmt.Println("Command gets executed in one thread !")
 		check(err)
 		for _, file := range args {
 			file := openFile(file)
@@ -493,7 +494,6 @@ func main() {
 		}
 		_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
 		check(err)
-		fmt.Println("KK")
 		os.Exit(0)
 	}
 
@@ -549,6 +549,7 @@ func main() {
 			_ = ok
 			// If action statement does not contain a user defined function or an accumulation operation
 			if !ok && !strings.Contains(actionStatement, "print") && !emptyStmt && len(actionStatement) > 0 {
+				fmt.Println("Command gets executed in one thread !")
 				oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
 				check(err)
 				for _, file := range args {
@@ -566,8 +567,7 @@ func main() {
 					Funcs:  funcs,
 				}
 				_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
-				check(err)
-				fmt.Println("LL")
+				check(err)				
 				os.Exit(0)
 			}
 
