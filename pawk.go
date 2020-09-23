@@ -70,6 +70,7 @@ var (
 	ok bool
 	flag bool
 	actionStatement string
+	okArray []bool
 )
 
 type received struct {
@@ -391,7 +392,7 @@ func main() {
 	printStartIndex, printEndIndex := returnBeginPrintIndices(bbb)
 
 	// Responsible for removing print statements from action statement
-	if len(printStartIndex) > 0 && !strings.Contains(eventualAwkCommand, "for") && !strings.Contains(eventualAwkCommand, "if") {
+	if len(printStartIndex) > 0 && !strings.Contains(eventualAwkCommand, "for") {
 		// checks that print operation have something to print
 		for i := 0; i < len(printEndIndex); i++ {
 			if printEndIndex[i]-printStartIndex[i] <= 1 {
@@ -435,6 +436,9 @@ func main() {
 	} else {
 		eventualAwkCommand = init
 	}
+
+	fmt.Println(eventualAwkCommand)
+	//TO-DO FOR EACH ACTION STATEMENT CHECKING IF IT IS EMPTY AND THEN EXECUTING IN ONE THREAD 
 
 	prog, err, varTypes := parser.ParseProgram([]byte(eventualAwkCommand), config)
 	check(err)
@@ -522,48 +526,22 @@ func main() {
 		for _, pat := range prog.Actions {
 
 			actionStatement = pat.Stmts.String()
+			ok = false
 			if len(funcnames) > 0 {
 				actionSlice := strings.Fields(actionStatement)
 				for _, s := range actionSlice {
 					for _, n := range funcnames {
 						if strings.Contains(s, n) {
-							if flag {
-								fmt.Println("!")
-								ok = ok && true
-							} else {
-								fmt.Println("@")
-								ok = true
-							}
-						} else {
-							if flag {
-								fmt.Println("#")
-								ok = ok && false
-							} else {
-								fmt.Println("$")
-								ok = false
-							}
+							nameSlice = append(nameSlice, n)
+							ok = true
 						}
 					}
 				}
 			}
 
 			for _, char := range actionStatement {
-				if (string(char) == "+" || string(char) == "-") {
-					if flag {
-						fmt.Println("%")
-						ok = ok && true
-					} else {
-						fmt.Println("^")
-						ok = true
-					}
-				} else {
-					if flag {
-						fmt.Println("&")
-						ok = ok && false
-					} else {
-						fmt.Println("*")
-						ok = false
-					}
+				if string(char) == "+" || string(char) == "-"{
+					ok = true
 				}
 			}
 
@@ -579,13 +557,16 @@ func main() {
 					proceed = true
 				}
 			}
+			okArray = append(okArray, ok)
+		}
 
-			flag = true
+		ok = true
+		for _, isOk := range okArray {
+			ok = ok && isOk
 		}
 
 		// If action statement does not contain a user defined function or an accumulation operation
 		if !ok && !strings.Contains(actionStatement, "print") {
-			fmt.Println(ok)
 			fmt.Println("Command gets executed in one thread !")
 			oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
 			check(err)
@@ -607,27 +588,27 @@ func main() {
 			os.Exit(0)
 		}
 
-		if !emptyStmt && len(actionStatement) > 0 {
-			fmt.Println("Command gets executed in one thread !")
-			oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
-			check(err)
-			for _, file := range args {
-				file := openFile(file)
-				defer file.Close()
-				text = append(text, divideFile(file, 1)[0].buff...)
-			}
-			input := bytes.NewReader(text)
-			oneThreadConfig := &interp.Config{
-				Stdin:  input,
-				Output: nil,
-				Error:  ioutil.Discard,
-				Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
-				Funcs:  funcs,
-			}
-			_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
-			check(err)
-			os.Exit(0)
-		}
+	// 	if !emptyStmt && len(actionStatement) > 0 {
+	// 		fmt.Println("Command gets executed in one thread !")
+	// 		oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
+	// 		check(err)
+	// 		for _, file := range args {
+	// 			file := openFile(file)
+	// 			defer file.Close()
+	// 			text = append(text, divideFile(file, 1)[0].buff...)
+	// 		}
+	// 		input := bytes.NewReader(text)
+	// 		oneThreadConfig := &interp.Config{
+	// 			Stdin:  input,
+	// 			Output: nil,
+	// 			Error:  ioutil.Discard,
+	// 			Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+	// 			Funcs:  funcs,
+	// 		}
+	// 		_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
+	// 		check(err)
+	// 		os.Exit(0)
+	// 	}
 	}
 
 	// checks that there are not empty variables
