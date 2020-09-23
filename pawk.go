@@ -76,6 +76,7 @@ var (
 	myVariable []string
 	actionArgument string
 	proceed = true
+	input = bytes.NewReader([]byte("foo bar\n\nbaz buz"))
 )
 
 type received struct {
@@ -362,7 +363,6 @@ func main() {
 	} else {
 		eventualAwkCommand = newAwkCommand
 	}
-	fmt.Println(eventualAwkCommand)
 
 	// Remove the END statement, gets handled on its own at the end
 	if strings.Contains(newAwkCommand, "END") {
@@ -484,6 +484,19 @@ func main() {
 				}
 				_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
 				check(err)
+				end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
+				check(err)
+
+				configEnd := &interp.Config{
+					Stdin:  input,
+					Output: nil,
+					Error:  ioutil.Discard,
+					Vars:   []string{"OFS", " ", "FS", " "},
+					Funcs:  funcs,
+				}
+
+				_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
+				check(err)
 				os.Exit(0)
 			}
 		}
@@ -511,15 +524,29 @@ func main() {
 
 		input := bytes.NewReader(text)
 
-		configEnd := &interp.Config{
+		config := &interp.Config{
 			Stdin:  input,
 			Output: nil,
 			Error:  ioutil.Discard,
 			Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
 		}
 
-		_, err, _ = interp.ExecOneThread(pp, configEnd, associativeArrays)
+		_, err, _ = interp.ExecOneThread(pp, config, associativeArrays)
 		check(err)
+		end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
+		check(err)
+
+		configEnd := &interp.Config{
+			Stdin:  input,
+			Output: nil,
+			Error:  ioutil.Discard,
+			Vars:   []string{"OFS", " ", "FS", " "},
+			Funcs:  funcs,
+		}
+
+		_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
+		check(err)
+		os.Exit(0)
 	}
 
 	funcnames := make([]string, 0, len(funcs))
@@ -546,6 +573,19 @@ func main() {
 			Funcs:  funcs,
 		}
 		_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
+		check(err)
+		end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
+		check(err)
+
+		configEnd := &interp.Config{
+			Stdin:  input,
+			Output: nil,
+			Error:  ioutil.Discard,
+			Vars:   []string{"OFS", " ", "FS", " "},
+			Funcs:  funcs,
+		}
+
+		_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
 		check(err)
 		os.Exit(0)
 	}
@@ -633,6 +673,19 @@ func main() {
 			}
 			_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
 			check(err)
+			end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
+			check(err)
+
+			configEnd := &interp.Config{
+				Stdin:  input,
+				Output: nil,
+				Error:  ioutil.Discard,
+				Vars:   []string{"OFS", " ", "FS", " "},
+				Funcs:  funcs,
+			}
+
+			_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
+			check(err)
 			os.Exit(0)
 		}
 	}
@@ -651,168 +704,186 @@ func main() {
 		}
 	}
 
-	// Goroutines usage for allowing paralle processing.
-	if numberOfThreads > runtime.GOMAXPROCS(0) {
-		fmt.Println("Number of threads surpasses available CPU cores. Reverting to " + strconv.Itoa(runtime.GOMAXPROCS(0)) + " threads. (Equal to the maximum number of CPU cores)")
-		numberOfThreads = runtime.GOMAXPROCS(0)
-	}
-
-	array := make([]*received, numberOfThreads)
-	arraysPerFile := make(map[int][]*received)
-	l := 0
-	channel := make(chan *received)
-	for _, file := range args {
-		file := openFile(file)
-		defer file.Close()
-		chunks := divideFile(file, numberOfThreads)
-		// for _, c := range chunks {
-		// 	fmt.Println("BEGIN")
-		// 	fmt.Println(string(c.buff))
-		// 	fmt.Println("END")
-		// }
-		for i := 0; i < numberOfThreads; i++ {
-			go func(chunks []chunk, i int, r chan<- *received) {
-				chunk := chunks[i]
-				res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)
-				got := &received{results: res, nativeFunctions: nat, functionNames: names, associativeArray: arrays}
-				r <- got
-			}(chunks, i, channel)
+	// In case there is an action body
+	if len(prog.Actions) > 0 {
+		// Goroutines usage for allowing paralle processing.
+		if numberOfThreads > runtime.GOMAXPROCS(0) {
+			fmt.Println("Number of threads surpasses available CPU cores. Reverting to " + strconv.Itoa(runtime.GOMAXPROCS(0)) + " threads. (Equal to the maximum number of CPU cores)")
+			numberOfThreads = runtime.GOMAXPROCS(0)
 		}
-		for i := 0; i < numberOfThreads; i++ {
-			array[i] = <-channel
-		}
-		arraysPerFile[l] = array
-		array = make([]*received, numberOfThreads)
-		l += 1
-	}
 
-	// for i:= 0; i < numberOfThreads; i++ {
-	// 	fmt.Println(array[i].results)
-	// 	fmt.Println(array[i].nativeFunctions)
-	// 	fmt.Println(array[i].functionNames)
-	// 	fmt.Println(array[i].associativeArray)
-	// }
-
-	// Performs the suitable Reduction
-	mapOfVariables := make(map[string]float64)
-	for f:= 0; f < l; f++ {
-		array = arraysPerFile[f]
-		j := 0
-		k := 0
-		for true {
-			if len(array[k].nativeFunctions) > 0 {
-				break
-			} else {
-				k += 1
+		array := make([]*received, numberOfThreads)
+		arraysPerFile := make(map[int][]*received)
+		l := 0
+		channel := make(chan *received)
+		for _, file := range args {
+			file := openFile(file)
+			defer file.Close()
+			chunks := divideFile(file, numberOfThreads)
+			// for _, c := range chunks {
+			// 	fmt.Println("BEGIN")
+			// 	fmt.Println(string(c.buff))
+			// 	fmt.Println("END")
+			// }
+			for i := 0; i < numberOfThreads; i++ {
+				go func(chunks []chunk, i int, r chan<- *received) {
+					chunk := chunks[i]
+					res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)
+					got := &received{results: res, nativeFunctions: nat, functionNames: names, associativeArray: arrays}
+					r <- got
+				}(chunks, i, channel)
 			}
+			for i := 0; i < numberOfThreads; i++ {
+				array[i] = <-channel
+			}
+			arraysPerFile[l] = array
+			array = make([]*received, numberOfThreads)
+			l += 1
 		}
-		boolSlice := array[k].nativeFunctions
-		if len(variable) > 0 {
-			if len(boolSlice) == len(variable) {
-				for i := 0; i < len(boolSlice); i++ {
-					if boolSlice[i] { //means we deal with native function
-						if nameSlice[j] == "min" {
-							min = array[k].results[i]
-							for _, ar := range array {
-								if len(ar.results) > 0 {
-									if ar.results[i] < min {
-										min = ar.results[i]
+
+		// for i:= 0; i < numberOfThreads; i++ {
+		// 	fmt.Println(array[i].results)
+		// 	fmt.Println(array[i].nativeFunctions)
+		// 	fmt.Println(array[i].functionNames)
+		// 	fmt.Println(array[i].associativeArray)
+		// }
+
+		// Performs the suitable Reduction
+		mapOfVariables := make(map[string]float64)
+		for f:= 0; f < l; f++ {
+			array = arraysPerFile[f]
+			j := 0
+			k := 0
+			for true {
+				if len(array[k].nativeFunctions) > 0 {
+					break
+				} else {
+					k += 1
+				}
+			}
+			boolSlice := array[k].nativeFunctions
+			if len(variable) > 0 {
+				if len(boolSlice) == len(variable) {
+					for i := 0; i < len(boolSlice); i++ {
+						if boolSlice[i] { //means we deal with native function
+							if nameSlice[j] == "min" {
+								min = array[k].results[i]
+								for _, ar := range array {
+									if len(ar.results) > 0 {
+										if ar.results[i] < min {
+											min = ar.results[i]
+										}
 									}
 								}
-							}
-							mapOfVariables[variable[i]] = min
-						} else if nameSlice[j] == "max" {
-							max = array[k].results[i]
-							for _, ar := range array {
-								if len(ar.results) > 0 {
-									if ar.results[i] > max {
-										max = ar.results[i]
+								mapOfVariables[variable[i]] = min
+							} else if nameSlice[j] == "max" {
+								max = array[k].results[i]
+								for _, ar := range array {
+									if len(ar.results) > 0 {
+										if ar.results[i] > max {
+											max = ar.results[i]
+										}
 									}
 								}
+								mapOfVariables[variable[i]] = max
 							}
-							mapOfVariables[variable[i]] = max
-						}
-						j++
-					} else {
-						for _, ar := range array {
-							if len(ar.results) > 0 {
-								mapOfVariables[variable[i]] += ar.results[i]
+							j++
+						} else {
+							for _, ar := range array {
+								if len(ar.results) > 0 {
+									mapOfVariables[variable[i]] += ar.results[i]
+								}
 							}
 						}
 					}
 				}
 			}
-		}
 
-		if len(variable) > 0 {
-			if len(array[0].associativeArray) > 0 {
-				associativeValue = make(map[string]float64)
-				associativeValues = make(map[string]map[string]float64)
-				for i:=0; i < len(variable); i++ {
-					match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
-					if match {
-						for _, ar := range array {
-							for k := range ar.associativeArray {
-								associativeValue[k] += ar.associativeArray[k]
-								// associativeValues[variable[i]][k] += ar.associativeArray[k]
+			if len(variable) > 0 {
+				if len(array[0].associativeArray) > 0 {
+					associativeValue = make(map[string]float64)
+					associativeValues = make(map[string]map[string]float64)
+					for i:=0; i < len(variable); i++ {
+						match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
+						if match {
+							for _, ar := range array {
+								for k := range ar.associativeArray {
+									associativeValue[k] += ar.associativeArray[k]
+									// associativeValues[variable[i]][k] += ar.associativeArray[k]
+								}
 							}
-						}
-						variable[i] = variable[i][:strings.Index(variable[i], "[")]
-						associativeValues[variable[i]] = associativeValue
-					} else {
-							if mapOfVariables[variable[i]] == float64(0) {
-								for _, ar := range array {
-									for k := range ar.associativeArray {
-										mapOfVariables[variable[i]] += ar.associativeArray[k]
+							variable[i] = variable[i][:strings.Index(variable[i], "[")]
+							associativeValues[variable[i]] = associativeValue
+						} else {
+								if mapOfVariables[variable[i]] == float64(0) {
+									for _, ar := range array {
+										for k := range ar.associativeArray {
+											mapOfVariables[variable[i]] += ar.associativeArray[k]
+										}
 									}
 								}
 							}
-						}
+					}
 				}
 			}
 		}
-	}
 
-	end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
-	check(err)
+		end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
+		check(err)
 
-	arrayKeys := make([]string, 0, len(end.Arrays))
-	for k := range end.Arrays {
-		arrayKeys = append(arrayKeys, k)
-	}
+		arrayKeys := make([]string, 0, len(end.Arrays))
+		for k := range end.Arrays {
+			arrayKeys = append(arrayKeys, k)
+		}
 
-	associativeArrays = make(map[int]map[string]float64)
+		associativeArrays = make(map[int]map[string]float64)
 
-	for i, k := range arrayKeys {
-		if k == "ARGV" {
-			associativeArrays[i] = make(map[string]float64)
-		} else {
-			for _, vf := range variable {
-				if vf == k {
-					associativeArrays[i] = associativeValues[k]
+		for i, k := range arrayKeys {
+			if k == "ARGV" {
+				associativeArrays[i] = make(map[string]float64)
+			} else {
+				for _, vf := range variable {
+					if vf == k {
+						associativeArrays[i] = associativeValues[k]
+					}
 				}
 			}
 		}
-	}
 
-	keys := make([]string, 0, len(mapOfVariables))
-	for k := range mapOfVariables {
-		keys = append(keys, k)
-	}
+		keys := make([]string, 0, len(mapOfVariables))
+		for k := range mapOfVariables {
+			keys = append(keys, k)
+		}
 
-	for _, k := range keys {
-		end.Scalars[k] = mapOfVariables[k]
-	}
+		for _, k := range keys {
+			end.Scalars[k] = mapOfVariables[k]
+		}
 
-	input := bytes.NewReader([]byte("foo bar\n\nbaz buz"))
-	configEnd := &interp.Config{
-		Stdin:  input,
-		Output: nil,
-		Error:  ioutil.Discard,
-		Vars:   []string{"OFS", " ", "FS", " "},
-		Funcs:  funcs,
-	}
+		input := bytes.NewReader([]byte("foo bar\n\nbaz buz"))
+		configEnd := &interp.Config{
+			Stdin:  input,
+			Output: nil,
+			Error:  ioutil.Discard,
+			Vars:   []string{"OFS", " ", "FS", " "},
+			Funcs:  funcs,
+		}
 
-	_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
-	check(err)
+		_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
+		check(err)
+	} else {
+		end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
+		check(err)
+		input := bytes.NewReader([]byte("foo bar\n\nbaz buz"))
+
+		configEnd := &interp.Config{
+			Stdin:  input,
+			Output: nil,
+			Error:  ioutil.Discard,
+			Vars:   []string{"OFS", " ", "FS", " "},
+			Funcs:  funcs,
+		}
+
+		_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
+		check(err)
+	}
 }
