@@ -67,6 +67,9 @@ var (
 	associativeValue map[string]float64
 	associativeArrays map[int]map[string]float64
 	arraysPerFile map[int][]*received
+	ok bool
+	flag bool
+	actionStatement string
 )
 
 type received struct {
@@ -170,8 +173,7 @@ func returnBeginPrintIndices(statement string) ([]int, []int) {
 }
 
 // Used to divide the file to n equal parts that will be fed to the n different processors running in parallel
-func divideFile(file *os.File, n int) ([]chunk, []int64) {
-	offsets := make([]int64, n)
+func divideFile(file *os.File, n int) []chunk {
 	chunk := make([]chunk, n)
 	o := int64(0)
 	bytesToRead := 0
@@ -203,18 +205,16 @@ func divideFile(file *os.File, n int) ([]chunk, []int64) {
 		}
 		o, err = file.Seek(o+int64(end), 0)
 		check(err)
-		offsets[thread] = o
 	}
-	return chunk, offsets
+	return chunk
 }
 
 // Responsible for communicating with the goAwk dependency. Returns the parsed awk Command
-func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFieldSeparator string, funcs map[string]interface{}, offset int64) ([]float64, []bool, []string, map[string]float64) {
+func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFieldSeparator string, funcs map[string]interface{}) ([]float64, []bool, []string, map[string]float64) {
 	config := &interp.Config{
 		Stdin: bytes.NewReader(chunk),
 		Vars:  []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
 		Funcs: funcs,
-		Offset: offset,
 	}
 	_, err, res, natives, names, arrays := interp.ExecProgram(prog, config)
 	check(err)
@@ -452,8 +452,7 @@ func main() {
 		for _, file := range args {
 			file := openFile(file)
 			defer file.Close()
-			fileText, _ := divideFile(file, 1)
-			text = append(text, fileText[0].buff...)
+			text = append(text, divideFile(file, 1)[0].buff...)
 		}
 
 		input := bytes.NewReader(text)
@@ -481,8 +480,7 @@ func main() {
 		for _, file := range args {
 			file := openFile(file)
 			defer file.Close()
-			fileText, _ := divideFile(file, 1)
-			text = append(text, fileText[0].buff...)
+			text = append(text, divideFile(file, 1)[0].buff...)
 		}
 		input := bytes.NewReader(text)
 		oneThreadConfig := &interp.Config{
@@ -519,56 +517,54 @@ func main() {
 	var myVariable []string
 	var actionArgument string
 	var proceed = true
-	var operations []string
 	// Used for ensuring that only accumulation and assignment operations are allowed in action statements.
 	if len(prog.Actions) > 0 {
 		for _, pat := range prog.Actions {
 
-			actionStatement := pat.Stmts.String()
-
-			ok := false
+			actionStatement = pat.Stmts.String()
 			if len(funcnames) > 0 {
 				actionSlice := strings.Fields(actionStatement)
 				for _, s := range actionSlice {
 					for _, n := range funcnames {
 						if strings.Contains(s, n) {
-							nameSlice = append(nameSlice, n)
-							ok = true
-							operations = append(operations, "min/max")
+							if flag {
+								fmt.Println("!")
+								ok = ok && true
+							} else {
+								fmt.Println("@")
+								ok = true
+							}
+						} else {
+							if flag {
+								fmt.Println("#")
+								ok = ok && false
+							} else {
+								fmt.Println("$")
+								ok = false
+							}
 						}
 					}
 				}
 			}
 
 			for _, char := range actionStatement {
-				if string(char) == "+" || string(char) == "-"{
-					ok = true
-					operations = append(operations, "accumulation")
+				if (string(char) == "+" || string(char) == "-") {
+					if flag {
+						fmt.Println("%")
+						ok = ok && true
+					} else {
+						fmt.Println("^")
+						ok = true
+					}
+				} else {
+					if flag {
+						fmt.Println("&")
+						ok = ok && false
+					} else {
+						fmt.Println("*")
+						ok = false
+					}
 				}
-			}
-			_ = ok
-			// If action statement does not contain a user defined function or an accumulation operation
-			if !ok && !strings.Contains(actionStatement, "print") && !emptyStmt && len(actionStatement) > 0 {
-				fmt.Println("Command gets executed in one thread !")
-				oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
-				check(err)
-				for _, file := range args {
-					file := openFile(file)
-					defer file.Close()
-					fileText, _ := divideFile(file, 1)
-					text = append(text, fileText[0].buff...)
-				}
-				input := bytes.NewReader(text)
-				oneThreadConfig := &interp.Config{
-					Stdin:  input,
-					Output: nil,
-					Error:  ioutil.Discard,
-					Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
-					Funcs:  funcs,
-				}
-				_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
-				check(err)				
-				os.Exit(0)
 			}
 
 			// stores to myVariable slice all the variables that exist in the action Statement
@@ -583,6 +579,54 @@ func main() {
 					proceed = true
 				}
 			}
+
+			flag = true
+		}
+
+		// If action statement does not contain a user defined function or an accumulation operation
+		if !ok && !strings.Contains(actionStatement, "print") {
+			fmt.Println(ok)
+			fmt.Println("Command gets executed in one thread !")
+			oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
+			check(err)
+			for _, file := range args {
+				file := openFile(file)
+				defer file.Close()
+				text = append(text, divideFile(file, 1)[0].buff...)
+			}
+			input := bytes.NewReader(text)
+			oneThreadConfig := &interp.Config{
+				Stdin:  input,
+				Output: nil,
+				Error:  ioutil.Discard,
+				Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+				Funcs:  funcs,
+			}
+			_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
+			check(err)
+			os.Exit(0)
+		}
+
+		if !emptyStmt && len(actionStatement) > 0 {
+			fmt.Println("Command gets executed in one thread !")
+			oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
+			check(err)
+			for _, file := range args {
+				file := openFile(file)
+				defer file.Close()
+				text = append(text, divideFile(file, 1)[0].buff...)
+			}
+			input := bytes.NewReader(text)
+			oneThreadConfig := &interp.Config{
+				Stdin:  input,
+				Output: nil,
+				Error:  ioutil.Discard,
+				Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+				Funcs:  funcs,
+			}
+			_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
+			check(err)
+			os.Exit(0)
 		}
 	}
 
@@ -612,7 +656,7 @@ func main() {
 	for _, file := range args {
 		file := openFile(file)
 		defer file.Close()
-		chunks, offsets := divideFile(file, numberOfThreads)
+		chunks := divideFile(file, numberOfThreads)
 		// for _, c := range chunks {
 		// 	fmt.Println("BEGIN")
 		// 	fmt.Println(string(c.buff))
@@ -621,7 +665,7 @@ func main() {
 		for i := 0; i < numberOfThreads; i++ {
 			go func(chunks []chunk, i int, r chan<- *received) {
 				chunk := chunks[i]
-				res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs, offsets[i])
+				res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)
 				got := &received{results: res, nativeFunctions: nat, functionNames: names, associativeArray: arrays}
 				r <- got
 			}(chunks, i, channel)
