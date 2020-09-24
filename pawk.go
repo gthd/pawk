@@ -77,6 +77,7 @@ var (
 	actionArgument string
 	proceed = true
 	input = bytes.NewReader([]byte("foo bar\n\nbaz buz"))
+	actionString string
 )
 
 type received struct {
@@ -445,12 +446,25 @@ func main() {
 	indexes = append(indexes, len([]byte(eventualAwkCommand)))
 	for i, _ := range indexes {
 		if i == 0 {
-			actions[i] = string([]byte(eventualAwkCommand)[:indexes[i]])
+			actionString =  string([]byte(eventualAwkCommand)[:indexes[i]])
+			actionString = strings.TrimPrefix(actionString, "\n")
+			actionString = strings.TrimSuffix(actionString, "\n")
+			if !( actionString == "{" || actionString == "}") {
+				actions[i] = actionString
+			}
 		} else if i != len(indexes) -1 {
-			actions[i] = string([]byte(eventualAwkCommand)[indexes[i-1]:indexes[i]])
+			actionString = string([]byte(eventualAwkCommand)[indexes[i-1]:indexes[i]])
+			actionString = strings.TrimPrefix(actionString, "\n")
+			actionString = strings.TrimSuffix(actionString, "\n")
+			if !( actionString == "{" || actionString == "}") {
+				actions[i] = actionString
+			}
 		} else {
-			if len(strings.TrimSpace(string([]byte(eventualAwkCommand)[indexes[i-1]:]))) > 0 {
-				actions[i] = string([]byte(eventualAwkCommand)[indexes[i-1]:])
+			actionString = string([]byte(eventualAwkCommand)[indexes[i-1]:])
+			actionString = strings.TrimPrefix(actionString, "\n")
+			actionString = strings.TrimSuffix(actionString, "\n")
+			if len(strings.TrimSpace(string([]byte(eventualAwkCommand)[indexes[i-1]:]))) > 0 && !( actionString == "{" || actionString == "}") {
+				actions[i] = actionString
 			}
 		}
 	}
@@ -463,41 +477,43 @@ func main() {
 
 	// Checks if an action statement contains an empty if operator, should be executed in one thread
 	for k := range actions {
-		actStatement := actions[k][strings.Index(actions[k], "{")+1:strings.Index(actions[k], "}")]
-		if strings.Contains(actStatement, "if") {
-			if len(strings.TrimSpace(actStatement[strings.Index(actStatement, ")")+1:])) == 0 {
-				fmt.Println("Command gets executed in one thread !")
-				oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
-				check(err)
-				for _, file := range args {
-					file := openFile(file)
-					defer file.Close()
-					text = append(text, divideFile(file, 1)[0].buff...)
-				}
-				input := bytes.NewReader(text)
-				oneThreadConfig := &interp.Config{
-					Stdin:  input,
-					Output: nil,
-					Error:  ioutil.Discard,
-					Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
-					Funcs:  funcs,
-				}
-				_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
-				check(err)
-				end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
-				check(err)
+		if strings.Index(actions[k], "{") != -1 && strings.Index(actions[k], "}") != -1 {
+			actStatement := actions[k][strings.Index(actions[k], "{")+1:strings.Index(actions[k], "}")]
+			if strings.Contains(actStatement, "if") {
+				if len(strings.TrimSpace(actStatement[strings.Index(actStatement, ")")+1:])) == 0 {
+					fmt.Println("Command gets executed in one thread !")
+					oneThreadProg, err, _ := parser.ParseProgram([]byte(awkCommand), config)
+					check(err)
+					for _, file := range args {
+						file := openFile(file)
+						defer file.Close()
+						text = append(text, divideFile(file, 1)[0].buff...)
+					}
+					input := bytes.NewReader(text)
+					oneThreadConfig := &interp.Config{
+						Stdin:  input,
+						Output: nil,
+						Error:  ioutil.Discard,
+						Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+						Funcs:  funcs,
+					}
+					_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
+					check(err)
+					end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
+					check(err)
 
-				configEnd := &interp.Config{
-					Stdin:  input,
-					Output: nil,
-					Error:  ioutil.Discard,
-					Vars:   []string{"OFS", " ", "FS", " "},
-					Funcs:  funcs,
-				}
+					configEnd := &interp.Config{
+						Stdin:  input,
+						Output: nil,
+						Error:  ioutil.Discard,
+						Vars:   []string{"OFS", " ", "FS", " "},
+						Funcs:  funcs,
+					}
 
-				_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
-				check(err)
-				os.Exit(0)
+					_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
+					check(err)
+					os.Exit(0)
+				}
 			}
 		}
 	}
