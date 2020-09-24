@@ -920,6 +920,7 @@ func main() {
 
 		_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
 		check(err)
+		os.RemoveAll(dir)
 	} else {
 		end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
 		check(err)
