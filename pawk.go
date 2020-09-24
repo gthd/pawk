@@ -27,6 +27,7 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"path/filepath"
 
 	"github.com/gthd/goawk/interp"
 	"github.com/gthd/goawk/parser"
@@ -78,11 +79,13 @@ var (
 	proceed = true
 	input = bytes.NewReader([]byte("foo bar\n\nbaz buz"))
 	actionString string
+	files []string
+	printText string
+	operations []bool
 )
 
 type received struct {
 	results         []float64
-	nativeFunctions []bool
 	functionNames   []string
 	associativeArray map[string]float64
 }
@@ -218,15 +221,16 @@ func divideFile(file *os.File, n int) []chunk {
 }
 
 // Responsible for communicating with the goAwk dependency. Returns the parsed awk Command
-func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFieldSeparator string, funcs map[string]interface{}) ([]float64, []bool, []string, map[string]float64) {
+func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFieldSeparator string, funcs map[string]interface{}, threadID int) ([]float64, []string, map[string]float64) {
 	config := &interp.Config{
 		Stdin: bytes.NewReader(chunk),
 		Vars:  []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
 		Funcs: funcs,
+		Thread: threadID,
 	}
-	_, err, res, natives, names, arrays := interp.ExecProgram(prog, config)
+	_, err, res, names, arrays := interp.ExecProgram(prog, config)
 	check(err)
-	return res, natives, names, arrays
+	return res, names, arrays
 }
 
 // Checks whether a string is contained inside a slice.
@@ -234,6 +238,9 @@ func isContained(s string, slice []string) bool {
 	flag := false
 	for _, k := range slice {
 		if k == s {
+			flag = true
+		}
+		if strings.Contains(s, k) {
 			flag = true
 		}
 	}
@@ -630,6 +637,18 @@ func main() {
 		for _, pat := range prog.Actions {
 
 			actionStatement = pat.Stmts.String()
+
+			subAwkCommands := strings.Split(actionStatement, "\n")
+			for _, awkCommand := range subAwkCommands {
+				if len([]byte(strings.TrimSpace(awkCommand))) != 0 {
+					if isContained(awkCommand, funcnames) {
+						operations = append(operations, true)
+					} else if strings.Contains(awkCommand, "+") || strings.Contains(awkCommand, "-") {
+						operations = append(operations, false)
+					}
+				}
+			}
+
 			ok = false
 			if len(funcnames) > 0 {
 				actionSlice := strings.Fields(actionStatement)
@@ -728,6 +747,17 @@ func main() {
 			numberOfThreads = runtime.GOMAXPROCS(0)
 		}
 
+		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+		if err != nil {
+						log.Fatal(err)
+		}
+		dir += "/temp_files"
+
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			os.RemoveAll(dir)
+		}
+		os.MkdirAll(dir, 0777)
+
 		array := make([]*received, numberOfThreads)
 		arraysPerFile := make(map[int][]*received)
 		l := 0
@@ -744,8 +774,8 @@ func main() {
 			for i := 0; i < numberOfThreads; i++ {
 				go func(chunks []chunk, i int, r chan<- *received) {
 					chunk := chunks[i]
-					res, nat, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs)
-					got := &received{results: res, nativeFunctions: nat, functionNames: names, associativeArray: arrays}
+					res, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs, i)
+					got := &received{results: res, functionNames: names, associativeArray: arrays}
 					r <- got
 				}(chunks, i, channel)
 			}
@@ -757,33 +787,17 @@ func main() {
 			l += 1
 		}
 
-		// for i:= 0; i < numberOfThreads; i++ {
-		// 	fmt.Println(array[i].results)
-		// 	fmt.Println(array[i].nativeFunctions)
-		// 	fmt.Println(array[i].functionNames)
-		// 	fmt.Println(array[i].associativeArray)
-		// }
-
 		// Performs the suitable Reduction
 		mapOfVariables := make(map[string]float64)
 		for f:= 0; f < l; f++ {
 			array = arraysPerFile[f]
 			j := 0
-			k := 0
-			for true {
-				if len(array[k].nativeFunctions) > 0 {
-					break
-				} else {
-					k += 1
-				}
-			}
-			boolSlice := array[k].nativeFunctions
 			if len(variable) > 0 {
-				if len(boolSlice) == len(variable) {
-					for i := 0; i < len(boolSlice); i++ {
-						if boolSlice[i] { //means we deal with native function
+				if len(operations) == len(variable) {
+					for i := 0; i < len(operations); i++ {
+						if operations[i] { //means we deal with native function
 							if nameSlice[j] == "min" {
-								min = array[k].results[i]
+								min = array[0].results[i]
 								for _, ar := range array {
 									if len(ar.results) > 0 {
 										if ar.results[i] < min {
@@ -793,7 +807,7 @@ func main() {
 								}
 								mapOfVariables[variable[i]] = min
 							} else if nameSlice[j] == "max" {
-								max = array[k].results[i]
+								max = array[0].results[i]
 								for _, ar := range array {
 									if len(ar.results) > 0 {
 										if ar.results[i] > max {
@@ -806,12 +820,16 @@ func main() {
 							j++
 						} else {
 							for _, ar := range array {
+								// fmt.Println(variable[i])
+								// fmt.Println(ar.results[i])
 								if len(ar.results) > 0 {
 									mapOfVariables[variable[i]] += ar.results[i]
 								}
 							}
 						}
 					}
+				} else {
+					panic("Cannot use same variable in different reduction operations !")
 				}
 			}
 
@@ -882,6 +900,22 @@ func main() {
 			Error:  ioutil.Discard,
 			Vars:   []string{"OFS", " ", "FS", " "},
 			Funcs:  funcs,
+		}
+
+		myErr := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+				if !info.IsDir() {
+	        files = append(files, path)
+	        return nil
+				}
+				return nil
+    })
+		check(myErr)
+
+		for _, file := range files {
+			content, myErr2 := ioutil.ReadFile(file)
+			check(myErr2)
+			printText = string(content)
+    	fmt.Println(printText)
 		}
 
 		_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
