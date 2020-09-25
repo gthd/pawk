@@ -82,6 +82,7 @@ var (
 	files []string
 	printText string
 	operations []bool
+	// toRemove []string
 )
 
 type received struct {
@@ -277,7 +278,7 @@ func getFunctions() map[string]interface{} {
 
 func main() {
 
-	debug.SetGCPercent(50)
+	debug.SetGCPercent(1)
 
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
@@ -775,6 +776,7 @@ func main() {
 				go func(chunks []chunk, i int, r chan<- *received) {
 					chunk := chunks[i]
 					res, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs, i)
+					// fmt.Println(res)
 					got := &received{results: res, functionNames: names, associativeArray: arrays}
 					r <- got
 				}(chunks, i, channel)
@@ -792,6 +794,7 @@ func main() {
 		for f:= 0; f < l; f++ {
 			array = arraysPerFile[f]
 			j := 0
+
 			if len(variable) > 0 {
 				if len(operations) == len(variable) {
 					for i := 0; i < len(operations); i++ {
@@ -820,8 +823,6 @@ func main() {
 							j++
 						} else {
 							for _, ar := range array {
-								// fmt.Println(variable[i])
-								// fmt.Println(ar.results[i])
 								if len(ar.results) > 0 {
 									mapOfVariables[variable[i]] += ar.results[i]
 								}
@@ -884,16 +885,25 @@ func main() {
 			}
 		}
 
-		keys := make([]string, 0, len(mapOfVariables))
-		for k := range mapOfVariables {
+		keys := make([]string, 0, len(end.Scalars))
+		for k := range end.Scalars {
 			keys = append(keys, k)
 		}
 
 		for _, k := range keys {
-			end.Scalars[k] = mapOfVariables[k]
+			if isContained(k, variable) {
+				end.Scalars[k] = mapOfVariables[k]
+			} else {
+				panic("END Statement contains variables that have not been assigned!")
+				// toRemove = append(toRemove, k)
+			}
 		}
 
-		input := bytes.NewReader([]byte("foo bar\n\nbaz buz"))
+		// for _, rem := range toRemove {
+		// 	delete(end.Scalars, rem)
+		// }		
+
+		input := bytes.NewReader([]byte(""))
 		configEnd := &interp.Config{
 			Stdin:  input,
 			Output: nil,
@@ -917,6 +927,7 @@ func main() {
 			printText = string(content)
     	fmt.Println(printText)
 		}
+
 
 		_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
 		check(err)
