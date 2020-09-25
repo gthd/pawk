@@ -901,7 +901,7 @@ func main() {
 
 		// for _, rem := range toRemove {
 		// 	delete(end.Scalars, rem)
-		// }		
+		// }
 
 		input := bytes.NewReader([]byte(""))
 		configEnd := &interp.Config{
@@ -927,7 +927,6 @@ func main() {
 			printText = string(content)
     	fmt.Println(printText)
 		}
-
 
 		_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
 		check(err)
