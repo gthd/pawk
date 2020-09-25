@@ -83,6 +83,7 @@ var (
 	printText string
 	operations []bool
 	// toRemove []string
+	numOfArgs int
 )
 
 type received struct {
@@ -709,6 +710,7 @@ func main() {
 			}
 			_, err, _ = interp.ExecOneThread(oneThreadProg, oneThreadConfig, associativeArrays)
 			check(err)
+
 			end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
 			check(err)
 
@@ -830,7 +832,16 @@ func main() {
 						}
 					}
 				} else {
-					panic("Cannot use same variable in different reduction operations !")
+					numOfArgs = len(variable)
+					for _, v := range variable {
+						isMatch, _ := regexp.MatchString("\\[[^\\]]*\\]", v)
+						if isMatch {
+							numOfArgs += 1
+						}
+					}
+					if numOfArgs != len(operations) {
+						panic("Cannot use same variable in different reduction operations !")
+					}
 				}
 			}
 
@@ -893,10 +904,10 @@ func main() {
 		for _, k := range keys {
 			if isContained(k, variable) {
 				end.Scalars[k] = mapOfVariables[k]
-			} else {
-				panic("END Statement contains variables that have not been assigned!")
-				// toRemove = append(toRemove, k)
-			}
+			 } //else {
+			// 	panic("END Statement contains variables that have not been assigned!")
+			// 	toRemove = append(toRemove, k)
+			// }
 		}
 
 		// for _, rem := range toRemove {
