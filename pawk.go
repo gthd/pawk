@@ -1,3 +1,4 @@
+
 // Copyright 2020 Georgios Theodorou
 //
 //    Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,9 +14,6 @@
 //    limitations under the License.
 
 package main
-
-// #include <unistd.h>
-import "C"
 
 import (
 	"bytes"
@@ -87,9 +85,6 @@ var (
 	operations []bool
 	// toRemove []string
 	numOfArgs int
-	subFileSize int
-	defaultSize int
-	multiple int
 )
 
 type received struct {
@@ -191,29 +186,16 @@ func returnBeginPrintIndices(statement string) ([]int, []int) {
 	return startingIndex, endingIndex
 }
 
-func helpFileRead(file *os.File, numberOfThreads int) (int, int) {
-	memory := C.sysconf(C._SC_PHYS_PAGES)*C.sysconf(C._SC_PAGE_SIZE)
-	_ = memory
-	subFileSize = 10 //int(memory) - 1500000000
-	for true {
-		multiple += 1
-		defaultSize = int(getSize(file) / multiple)
-		if defaultSize < subFileSize {
-			break
-		}
-	}
-	return int(defaultSize/numberOfThreads), multiple
-}
-
 // Used to divide the file to n equal parts that will be fed to the n different processors running in parallel
-var end int
-var bytesToRead int
-var o int64
-var multi int
-func divideFile(file *os.File, n int, defaultSize int, multiple int) []chunk {
-	multi ++
+func divideFile(file *os.File, n int) []chunk {
 	chunk := make([]chunk, n)
-	for thread := 0; thread < n ; thread++ {
+	o := int64(0)
+	bytesToRead := 0
+	end := 0
+	filesize := getSize(file)
+	defaultSize := int(filesize / int(n))
+	for thread := 0; thread < n; thread++ {
+
 		//In this way we check that the chunk does not end just before new line
 		bytesToRead = defaultSize + (bytesToRead - end) + 1
 
@@ -229,12 +211,11 @@ func divideFile(file *os.File, n int, defaultSize int, multiple int) []chunk {
 			}
 		}
 		if thread > 0 {
+
 			//For all threads other than the first, start from position 1 to exclude \n at the beginning of each chunk
 			chunk[thread].buff = b[1:end]
-		} else if thread == 0 && multi == 1 {
+		} else {
 			chunk[thread].buff = b[:end]
-		} else if thread == 0 {
-			chunk[thread].buff = b[1:end]
 		}
 		o, err = file.Seek(o+int64(end), 0)
 		check(err)
@@ -302,7 +283,7 @@ func main() {
 	debug.SetGCPercent(1)
 
 	go func() {
-		log.Println(http.ListenAndServe("localhost:8080", nil))
+		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
 	getopt.Parse()
@@ -516,10 +497,7 @@ func main() {
 					for _, file := range args {
 						file := openFile(file)
 						defer file.Close()
-						defaultSize, multiple = helpFileRead(file, 1)
-						for iter := 0; iter < multiple; iter++ {
-							text = append(text, divideFile(file, 1, defaultSize, multiple)[0].buff...)
-						}
+						text = append(text, divideFile(file, 1)[0].buff...)
 					}
 					input := bytes.NewReader(text)
 					oneThreadConfig := &interp.Config{
@@ -567,11 +545,9 @@ func main() {
 		for _, file := range args {
 			file := openFile(file)
 			defer file.Close()
-			defaultSize, multiple = helpFileRead(file, 1)
-			for iter := 0; iter < multiple; iter++ {
-				text = append(text, divideFile(file, 1, defaultSize, multiple)[0].buff...)
-			}
+			text = append(text, divideFile(file, 1)[0].buff...)
 		}
+
 		input := bytes.NewReader(text)
 
 		config := &interp.Config{
@@ -580,7 +556,7 @@ func main() {
 			Error:  ioutil.Discard,
 			Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
 		}
-		fmt.Println("Command gets executed in one thread !")
+
 		_, err, _ = interp.ExecOneThread(pp, config, associativeArrays)
 		check(err)
 		end, err, _ := parser.ParseProgram([]byte(endStatement), nil)
@@ -612,10 +588,7 @@ func main() {
 		for _, file := range args {
 			file := openFile(file)
 			defer file.Close()
-			defaultSize, multiple = helpFileRead(file, 1)
-			for iter := 0; iter < multiple; iter++ {
-				text = append(text, divideFile(file, 1, defaultSize, multiple)[0].buff...)
-			}
+			text = append(text, divideFile(file, 1)[0].buff...)
 		}
 		input := bytes.NewReader(text)
 		oneThreadConfig := &interp.Config{
@@ -726,10 +699,7 @@ func main() {
 			for _, file := range args {
 				file := openFile(file)
 				defer file.Close()
-				defaultSize, multiple = helpFileRead(file, 1)
-				for iter := 0; iter < multiple; iter++ {
-					text = append(text, divideFile(file, 1, defaultSize, multiple)[0].buff...)
-				}
+				text = append(text, divideFile(file, 1)[0].buff...)
 			}
 			input := bytes.NewReader(text)
 			oneThreadConfig := &interp.Config{
@@ -799,30 +769,27 @@ func main() {
 		for _, file := range args {
 			file := openFile(file)
 			defer file.Close()
-			defaultSize, multiple = helpFileRead(file, numberOfThreads)
-			for iter:= 0; iter < multiple; iter++ {
-				chunks := divideFile(file, numberOfThreads, defaultSize, multiple)
-				// for _, c := range chunks {
-				// 	fmt.Println("BEGIN")
-				// 	fmt.Println(string(c.buff))
-				// 	fmt.Println("END")
-				// }
-				for i := 0; i < numberOfThreads; i++ {
-					go func(chunks []chunk, i int, r chan<- *received) {
-						chunk := chunks[i]
-						res, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs, i)
-						// fmt.Println(res)
-						got := &received{results: res, functionNames: names, associativeArray: arrays}
-						r <- got
-					}(chunks, i, channel)
-				}
-				for i := 0; i < numberOfThreads; i++ {
-					array[i] = <-channel
-				}
-				arraysPerFile[l] = array
-				array = make([]*received, numberOfThreads)
-				l += 1
+			chunks := divideFile(file, numberOfThreads)
+			// for _, c := range chunks {
+			// 	fmt.Println("BEGIN")
+			// 	fmt.Println(string(c.buff))
+			// 	fmt.Println("END")
+			// }
+			for i := 0; i < numberOfThreads; i++ {
+				go func(chunks []chunk, i int, r chan<- *received) {
+					chunk := chunks[i]
+					res, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs, i)
+					// fmt.Println(res)
+					got := &received{results: res, functionNames: names, associativeArray: arrays}
+					r <- got
+				}(chunks, i, channel)
 			}
+			for i := 0; i < numberOfThreads; i++ {
+				array[i] = <-channel
+			}
+			arraysPerFile[l] = array
+			array = make([]*received, numberOfThreads)
+			l += 1
 		}
 
 		// Performs the suitable Reduction
