@@ -14,9 +14,7 @@
 
 package main
 
-// #include "stdlib.h"
-// #include <stdio.h>
-// #include <errno.h>
+// #include <unistd.h>
 import "C"
 
 import (
@@ -194,8 +192,8 @@ func returnBeginPrintIndices(statement string) ([]int, []int) {
 }
 
 func helpFileRead(file *os.File, numberOfThreads int) (int, int) {
-	memory = C.sysconf(C._SC_PHYS_PAGES)*C.sysconf(C._SC_PAGE_SIZE)
-	subFileSize = int(memory / numberOfThreads)
+	memory := C.sysconf(C._SC_PHYS_PAGES)*C.sysconf(C._SC_PAGE_SIZE)
+	subFileSize = int(int64(memory) / int64(numberOfThreads)) - 250000000
 	for true {
 		multiple += 1
 		defaultSize = int(getSize(file) / (numberOfThreads * multiple))
