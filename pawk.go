@@ -193,15 +193,16 @@ func returnBeginPrintIndices(statement string) ([]int, []int) {
 
 func helpFileRead(file *os.File, numberOfThreads int) (int, int) {
 	memory := C.sysconf(C._SC_PHYS_PAGES)*C.sysconf(C._SC_PAGE_SIZE)
-	subFileSize = int(int64(memory) / int64(numberOfThreads)) - 250000000
+	_ = memory
+	subFileSize = 10 //int(memory) - 1500000000
 	for true {
 		multiple += 1
-		defaultSize = int(getSize(file) / (numberOfThreads * multiple))
+		defaultSize = int(getSize(file) / multiple)
 		if defaultSize < subFileSize {
 			break
 		}
 	}
-	return defaultSize, multiple
+	return int(defaultSize/numberOfThreads), multiple
 }
 
 // Used to divide the file to n equal parts that will be fed to the n different processors running in parallel
@@ -301,7 +302,7 @@ func main() {
 	debug.SetGCPercent(1)
 
 	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
+		log.Println(http.ListenAndServe("localhost:8080", nil))
 	}()
 
 	getopt.Parse()
@@ -571,7 +572,6 @@ func main() {
 				text = append(text, divideFile(file, 1, defaultSize, multiple)[0].buff...)
 			}
 		}
-
 		input := bytes.NewReader(text)
 
 		config := &interp.Config{
@@ -580,7 +580,7 @@ func main() {
 			Error:  ioutil.Discard,
 			Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
 		}
-
+		fmt.Println("Command gets executed in one thread !")
 		_, err, _ = interp.ExecOneThread(pp, config, associativeArrays)
 		check(err)
 		end, err, _ := parser.ParseProgram([]byte(endStatement), nil)

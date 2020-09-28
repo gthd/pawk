@@ -1,0 +1,1 @@
+{ a = max(a, $3); b = min(b, $3); sum = sum + $3; n = n + 1 } END { print a, b, sum, n }
