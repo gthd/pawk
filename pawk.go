@@ -534,6 +534,7 @@ func main() {
 
 	// Responsible for executing the print statements that exist in the action statement. Uses one thread since print cannot be parallelised
 	if len(printStartIndex) > 0 && len(prog.Actions) == 1 && !strings.Contains(eventualAwkCommand, "for"){
+		fmt.Println("Command gets executed in one thread !")
 		if len(prog.Actions) == 1 {
 			pp, err, _ = parser.ParseProgram([]byte(bbb), nil)
 			check(err)
