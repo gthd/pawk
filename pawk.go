@@ -1,4 +1,3 @@
-
 // Copyright 2020 Georgios Theodorou
 //
 //    Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,16 +18,16 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"os"
-	"regexp"
-	"runtime"
-	"runtime/debug"
-	"strconv"
-	"strings"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"runtime/debug"
+	"strconv"
+	"strings"
 
 	"github.com/gthd/goawk/interp"
 	"github.com/gthd/goawk/parser"
@@ -48,7 +47,8 @@ func check(e error) {
 
 var (
 	value                helper.Helper
-	numberOfThreads      = runtime.GOMAXPROCS(0)
+	numberOfThreads      int
+	numCores             int
 	fieldSeparator       = " "
 	offsetFieldSeparator = ":"
 	fileName             = ""
@@ -62,34 +62,34 @@ var (
 	emptyStmt            bool
 	text                 []byte
 	pp                   *parser.Program
-	hasEnd 								bool
-	hasBegin bool
-	bbb string
-	associativeValues map[string]map[string]float64
-	associativeValue map[string]float64
-	associativeArrays map[int]map[string]float64
-	arraysPerFile map[int][]*received
-	ok bool
-	flag bool
-	actionStatement string
-	okArray []bool
-	actions map[int]string
-	indexes []int
-	myVariable []string
-	actionArgument string
-	proceed = true
-	input = bytes.NewReader([]byte("foo bar\n\nbaz buz"))
-	actionString string
-	files []string
-	printText string
-	operations []bool
+	hasEnd               bool
+	hasBegin             bool
+	bbb                  string
+	associativeValues    map[string]map[string]float64
+	associativeValue     map[string]float64
+	associativeArrays    map[int]map[string]float64
+	arraysPerFile        map[int][]*received
+	ok                   bool
+	flag                 bool
+	actionStatement      string
+	okArray              []bool
+	actions              map[int]string
+	indexes              []int
+	myVariable           []string
+	actionArgument       string
+	proceed              = true
+	input                = bytes.NewReader([]byte("foo bar\n\nbaz buz"))
+	actionString         string
+	files                []string
+	printText            string
+	operations           []bool
 	// toRemove []string
 	numOfArgs int
 )
 
 type received struct {
-	results         []float64
-	functionNames   []string
+	results          []float64
+	functionNames    []string
 	associativeArray map[string]float64
 }
 
@@ -226,9 +226,9 @@ func divideFile(file *os.File, n int) []chunk {
 // Responsible for communicating with the goAwk dependency. Returns the parsed awk Command
 func goAwk(chunk []byte, prog *parser.Program, fieldSeparator string, offsetFieldSeparator string, funcs map[string]interface{}, threadID int) ([]float64, []string, map[string]float64) {
 	config := &interp.Config{
-		Stdin: bytes.NewReader(chunk),
-		Vars:  []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
-		Funcs: funcs,
+		Stdin:  bytes.NewReader(chunk),
+		Vars:   []string{"OFS", offsetFieldSeparator, "FS", fieldSeparator},
+		Funcs:  funcs,
 		Thread: threadID,
 	}
 	_, err, res, names, arrays := interp.ExecProgram(prog, config)
@@ -248,6 +248,26 @@ func isContained(s string, slice []string) bool {
 		}
 	}
 	return flag
+}
+
+func getNumCores() int {
+	out, _ := exec.Command("lscpu").Output()
+	outstring := strings.TrimSpace(string(out))
+	lines := strings.Split(outstring, "\n")
+	for _, line := range lines {
+		fields := strings.Split(line, ":")
+		if len(fields) < 2 {
+			continue
+		}
+		key := strings.TrimSpace(fields[0])
+		value := strings.TrimSpace(fields[1])
+		switch key {
+		case "Core(s) per socket":
+			t, _ := strconv.Atoi(value)
+			numCores = int(t)
+		}
+	}
+	return numCores
 }
 
 func getFunctions() map[string]interface{} {
@@ -280,7 +300,7 @@ func getFunctions() map[string]interface{} {
 
 func main() {
 
-	debug.SetGCPercent(1)
+	debug.SetGCPercent(100)
 
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
@@ -456,24 +476,24 @@ func main() {
 	indexes = append(indexes, len([]byte(eventualAwkCommand)))
 	for i, _ := range indexes {
 		if i == 0 {
-			actionString =  string([]byte(eventualAwkCommand)[:indexes[i]])
+			actionString = string([]byte(eventualAwkCommand)[:indexes[i]])
 			actionString = strings.TrimPrefix(actionString, "\n")
 			actionString = strings.TrimSuffix(actionString, "\n")
-			if !( actionString == "{" || actionString == "}") {
+			if !(actionString == "{" || actionString == "}") {
 				actions[i] = actionString
 			}
-		} else if i != len(indexes) -1 {
+		} else if i != len(indexes)-1 {
 			actionString = string([]byte(eventualAwkCommand)[indexes[i-1]:indexes[i]])
 			actionString = strings.TrimPrefix(actionString, "\n")
 			actionString = strings.TrimSuffix(actionString, "\n")
-			if !( actionString == "{" || actionString == "}") {
+			if !(actionString == "{" || actionString == "}") {
 				actions[i] = actionString
 			}
 		} else {
 			actionString = string([]byte(eventualAwkCommand)[indexes[i-1]:])
 			actionString = strings.TrimPrefix(actionString, "\n")
 			actionString = strings.TrimSuffix(actionString, "\n")
-			if len(strings.TrimSpace(string([]byte(eventualAwkCommand)[indexes[i-1]:]))) > 0 && !( actionString == "{" || actionString == "}") {
+			if len(strings.TrimSpace(string([]byte(eventualAwkCommand)[indexes[i-1]:]))) > 0 && !(actionString == "{" || actionString == "}") {
 				actions[i] = actionString
 			}
 		}
@@ -488,7 +508,7 @@ func main() {
 	// Checks if an action statement contains an empty if operator, should be executed in one thread
 	for k := range actions {
 		if strings.Index(actions[k], "{") != -1 && strings.Index(actions[k], "}") != -1 {
-			actStatement := actions[k][strings.Index(actions[k], "{")+1:strings.Index(actions[k], "}")]
+			actStatement := actions[k][strings.Index(actions[k], "{")+1 : strings.Index(actions[k], "}")]
 			if strings.Contains(actStatement, "if") {
 				if len(strings.TrimSpace(actStatement[strings.Index(actStatement, ")")+1:])) == 0 {
 					fmt.Println("Command gets executed in one thread !")
@@ -528,12 +548,11 @@ func main() {
 		}
 	}
 
-
 	prog, err, varTypes := parser.ParseProgram([]byte(eventualAwkCommand), config)
 	check(err)
 
 	// Responsible for executing the print statements that exist in the action statement. Uses one thread since print cannot be parallelised
-	if len(printStartIndex) > 0 && len(prog.Actions) == 1 && !strings.Contains(eventualAwkCommand, "for"){
+	if len(printStartIndex) > 0 && len(prog.Actions) == 1 && !strings.Contains(eventualAwkCommand, "for") {
 		fmt.Println("Command gets executed in one thread !")
 		if len(prog.Actions) == 1 {
 			pp, err, _ = parser.ParseProgram([]byte(bbb), nil)
@@ -667,7 +686,7 @@ func main() {
 			}
 
 			for _, char := range actionStatement {
-				if string(char) == "+" || string(char) == "-"{
+				if string(char) == "+" || string(char) == "-" {
 					ok = true
 				}
 			}
@@ -734,10 +753,10 @@ func main() {
 	var variable []string
 	for _, vvv := range myVariable {
 		if isContained(vvv, variable) {
-			continue;
+			continue
 		}
 		if strings.Contains(vvv, "for") {
-			continue;
+			continue
 		}
 		if len([]byte(vvv)) > 0 {
 			variable = append(variable, vvv)
@@ -747,14 +766,15 @@ func main() {
 	// In case there is an action body
 	if len(prog.Actions) > 0 {
 		// Goroutines usage for allowing paralle processing.
-		if numberOfThreads > runtime.GOMAXPROCS(0) {
-			fmt.Println("Number of threads surpasses available CPU cores. Reverting to " + strconv.Itoa(runtime.GOMAXPROCS(0)) + " threads. (Equal to the maximum number of CPU cores)")
-			numberOfThreads = runtime.GOMAXPROCS(0)
+		numCores = getNumCores()
+		if numberOfThreads > numCores {
+			fmt.Println("Number of threads surpasses available CPU cores. Reverting to " + strconv.Itoa(numCores) + " threads. (Equal to the maximum number of CPU cores)")
+			numberOfThreads = numCores
 		}
 
 		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 		if err != nil {
-						log.Fatal(err)
+			log.Fatal(err)
 		}
 		dir += "/temp_files"
 
@@ -795,7 +815,7 @@ func main() {
 
 		// Performs the suitable Reduction
 		mapOfVariables := make(map[string]float64)
-		for f:= 0; f < l; f++ {
+		for f := 0; f < l; f++ {
 			array = arraysPerFile[f]
 			j := 0
 
@@ -851,7 +871,7 @@ func main() {
 				if len(array[0].associativeArray) > 0 {
 					associativeValue = make(map[string]float64)
 					associativeValues = make(map[string]map[string]float64)
-					for i:=0; i < len(variable); i++ {
+					for i := 0; i < len(variable); i++ {
 						match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
 						if match {
 							for _, ar := range array {
@@ -863,14 +883,14 @@ func main() {
 							variable[i] = variable[i][:strings.Index(variable[i], "[")]
 							associativeValues[variable[i]] = associativeValue
 						} else {
-								if mapOfVariables[variable[i]] == float64(0) {
-									for _, ar := range array {
-										for k := range ar.associativeArray {
-											mapOfVariables[variable[i]] += ar.associativeArray[k]
-										}
+							if mapOfVariables[variable[i]] == float64(0) {
+								for _, ar := range array {
+									for k := range ar.associativeArray {
+										mapOfVariables[variable[i]] += ar.associativeArray[k]
 									}
 								}
 							}
+						}
 					}
 				}
 			}
@@ -906,7 +926,7 @@ func main() {
 		for _, k := range keys {
 			if isContained(k, variable) {
 				end.Scalars[k] = mapOfVariables[k]
-			 } //else {
+			} //else {
 			// 	panic("END Statement contains variables that have not been assigned!")
 			// 	toRemove = append(toRemove, k)
 			// }
@@ -926,19 +946,19 @@ func main() {
 		}
 
 		myErr := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-				if !info.IsDir() {
-	        files = append(files, path)
-	        return nil
-				}
+			if !info.IsDir() {
+				files = append(files, path)
 				return nil
-    })
+			}
+			return nil
+		})
 		check(myErr)
 
 		for _, file := range files {
 			content, myErr2 := ioutil.ReadFile(file)
 			check(myErr2)
 			printText = string(content)
-    	fmt.Println(printText)
+			fmt.Println(printText)
 		}
 
 		_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
