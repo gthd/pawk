@@ -302,7 +302,7 @@ func getFunctions() map[string]interface{} {
 
 func main() {
 
-	debug.SetGCPercent(1)
+	debug.SetGCPercent(100)
 
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
@@ -770,7 +770,6 @@ func main() {
 		// Goroutines usage for allowing paralle processing.
 		numCores = getNumCores()
 		fmt.Println(numCores)
-		numCores = 8
 		if numberOfThreads > numCores {
 			fmt.Println("Number of threads surpasses available CPU cores. Reverting to " + strconv.Itoa(numCores) + " threads. (Equal to the maximum number of CPU cores)")
 			numberOfThreads = numCores
