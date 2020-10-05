@@ -15,6 +15,8 @@
 package main
 
 import (
+	// "time"
+	"io"
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -191,38 +193,88 @@ func divideFile(file *os.File, n int) []chunk {
 	chunk := make([]chunk, n)
 	o := int64(0)
 	bytesToRead := 0
+	totalBytesRead := 0
 	end := 0
 	filesize := getSize(file)
 	defaultSize := int(filesize / int(n))
-	for thread := 0; thread < n; thread++ {
 
-		//In this way we check that the chunk does not end just before new line
-		bytesToRead = defaultSize + (bytesToRead - end) + 1
+	if n <= 2 {
+		content, err := ioutil.ReadFile(file.Name())
+		if err != nil {
+				log.Fatal(err)
+		}
+		stringText := string(content)
+		r := strings.NewReader(stringText)
 
-		//the byte length that gets handled by every thread
-		b := make([]byte, bytesToRead)
-		_, err := file.Read(b)
-		check(err)
-		_ = o
-		for i := bytesToRead - 1; i > 0; i-- {
-			if string(b[i]) == "\n" {
-				end = i
-				break
+		for thread := 0; thread < n; thread++ {
+
+			//In this way we check that the chunk does not end just before new line
+			bytesToRead = defaultSize + (bytesToRead - end)
+
+			if thread == n - 1 {
+				bytesToRead = len(stringText) - totalBytesRead
+			} else {
+				totalBytesRead += bytesToRead
 			}
+
+			//the byte length that gets handled by every thread
+			b := make([]byte, bytesToRead)
+			_, err := io.ReadFull(r, b)
+			// _, err := file.Read(b)
+			check(err)
+			_ = o
+			for i := bytesToRead - 1; i > 0; i-- {
+				if b[i] == 10 {
+					end = i
+					break
+				}
+			}
+
+			if thread > 0 {
+				//For all threads other than the first, start from position 1 to exclude \n at the beginning of each chunk
+				chunk[thread].buff = b[1:end]
+			} else {
+				chunk[thread].buff = b[:end]
+			}
+			print(chunk[thread].buff)
+
+			o, err = file.Seek(o+int64(end), 0)
+			check(err)
 		}
 
-		if thread > 0 {
+		return chunk
+	} else {
 
-			//For all threads other than the first, start from position 1 to exclude \n at the beginning of each chunk
-			chunk[thread].buff = b[1:end]
-		} else {
-			chunk[thread].buff = b[:end]
+		for thread := 0; thread < n; thread++ {
+
+			//In this way we check that the chunk does not end just before new line
+			bytesToRead = defaultSize + (bytesToRead - end) + 1
+
+			//the byte length that gets handled by every thread
+			b := make([]byte, bytesToRead)
+			_, err := file.Read(b)
+			check(err)
+			_ = o
+			for i := bytesToRead - 1; i > 0; i-- {
+				if b[i] == 10 {
+					end = i
+					break
+				}
+			}
+
+			if thread > 0 {
+				//For all threads other than the first, start from position 1 to exclude \n at the beginning of each chunk
+				chunk[thread].buff = b[1:end]
+			} else {
+				chunk[thread].buff = b[:end]
+			}
+			print(chunk[thread].buff)
+
+			o, err = file.Seek(o+int64(end), 0)
+			check(err)
 		}
-		o, err = file.Seek(o+int64(end), 0)
-		check(err)
+		return chunk
 	}
-
-	return chunk
 }
 
 // Responsible for communicating with the goAwk dependency. Returns the parsed awk Command
