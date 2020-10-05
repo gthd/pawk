@@ -1,0 +1,1 @@
+{ a = max($3, a); b = min($3, b); c = max($2, c); d = min($2, d) } END {print a, b, c, d}

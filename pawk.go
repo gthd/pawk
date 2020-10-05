@@ -210,6 +210,7 @@ func divideFile(file *os.File, n int) []chunk {
 				break
 			}
 		}
+
 		if thread > 0 {
 
 			//For all threads other than the first, start from position 1 to exclude \n at the beginning of each chunk
@@ -220,6 +221,7 @@ func divideFile(file *os.File, n int) []chunk {
 		o, err = file.Seek(o+int64(end), 0)
 		check(err)
 	}
+
 	return chunk
 }
 
@@ -300,7 +302,7 @@ func getFunctions() map[string]interface{} {
 
 func main() {
 
-	debug.SetGCPercent(100)
+	debug.SetGCPercent(1)
 
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
@@ -768,6 +770,7 @@ func main() {
 		// Goroutines usage for allowing paralle processing.
 		numCores = getNumCores()
 		fmt.Println(numCores)
+		numCores = 8
 		if numberOfThreads > numCores {
 			fmt.Println("Number of threads surpasses available CPU cores. Reverting to " + strconv.Itoa(numCores) + " threads. (Equal to the maximum number of CPU cores)")
 			numberOfThreads = numCores

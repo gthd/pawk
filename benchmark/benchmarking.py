@@ -4,7 +4,7 @@ import subprocess, resource, os
 
 class Benchmark:
 
-    def __init__(self, numberOfThreads=8, fileToWrite='/home/george/Desktop/Github/pawk/results.txt', version='/home/george/Desktop/Github/pawk/./pawk', fileToRead='/home/george/Desktop/Github/pawk/text_files/smalldata.txt'):
+    def __init__(self, numberOfThreads=8, fileToWrite='/home/george/Desktop/Github/pawk/results.txt', version='/home/george/Desktop/Github/pawk/./pawk', fileToRead='/home/george/Desktop/Github/pawk/text_files/testdata.txt'):
         self.numberOfThreads = numberOfThreads
         self.file = fileToWrite
         self.version = version
@@ -18,7 +18,7 @@ class Benchmark:
             return open(self.file, 'a')
 
     def getFiles(self):
-        onlyfiles = ['tt.03', 'tt.03a', 'tt.04', 'tt.05', 'tt.06', 'tt.13', 'tt.13a', 'stats.txt', 'sum.txt']
+        onlyfiles = ['tt.03', 'tt.03a', 'tt.06', 'stats.txt', 'sum.txt', 'minmax.txt']
         return onlyfiles
 
     def formCommand(self, awkFiles):
@@ -74,11 +74,17 @@ benchmark2.main()
 benchmark3 = Benchmark(version='gawk')
 benchmark3.main()
 
-# benchmark4 = Benchmark(fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/mydata.txt')
-# benchmark4.main()
-#
-# benchmark5 = Benchmark(fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/mydata.txt', version='awk')
-# benchmark5.main()
-#
-# benchmark6 = Benchmark(fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/mydata.txt', version='gawk')
-# benchmark6.main()
+benchmark7 = Benchmark(version='/home/george/go/bin/./goawk')
+benchmark7.main()
+
+benchmark4 = Benchmark(fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/bigdata.txt')
+benchmark4.main()
+
+benchmark5 = Benchmark(fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/bigdata.txt', version='awk')
+benchmark5.main()
+
+benchmark6 = Benchmark(fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/bigdata.txt', version='gawk')
+benchmark6.main()
+
+benchmark8 = Benchmark(version='/home/george/go/bin/./goawk', fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/bigdata.txt')
+benchmark8.main()
