@@ -14,9 +14,7 @@
 
 package main
 
-// #include "stdlib.h"
-// #include <stdio.h>
-// #include <errno.h>
+// #include <unistd.h>
 import "C"
 
 import (
@@ -196,15 +194,27 @@ func returnBeginPrintIndices(statement string) ([]int, []int) {
 	return startingIndex, endingIndex
 }
 
+func helpFileReading(file *os.File, numberOfThreads int) (int, int) {
+	memory := int(C.sysconf(C._SC_PHYS_PAGES)*C.sysconf(C._SC_PAGE_SIZE)) - 2500000000
+	subFileSize = int(memory/numberOfThreads)
+	for true {
+		multiple += 1
+		defaultSize = int(getSize(file) / (numberOfThreads*multiple))
+		if defaultSize < subFileSize {
+			break
+		}
+	}
+	return defaultSize, multiple
+}
+
+var end int
+var bytesToRead int
+var index int64
+var multi int
+
 // Used to divide the file to n equal parts that will be fed to the n different processors running in parallel
-func divideFile(file *os.File, n int) []chunk {
+func divideFile(file *os.File, n int, defaultSize int, multiple int) []chunk {
 	chunk := make([]chunk, n)
-	index := int64(0)
-	bytesToRead := 0
-	// totalBytesRead := 0
-	end := 0
-	filesize := getSize(file)
-	defaultSize := int(filesize / int(n))
 
 	for thread := 0; thread < n; thread++ {
 
@@ -225,8 +235,10 @@ func divideFile(file *os.File, n int) []chunk {
 		if thread > 0 {
 			//For all threads other than the first, start from position 1 to exclude \n at the beginning of each chunk
 			chunk[thread].buff = b[1:end]
-		} else {
+		} else if thread == 0 && multi == 1 {
 			chunk[thread].buff = b[:end]
+		} else if thread == 0 {
+			chunk[thread].buff = b[1:end]
 		}
 		_, err := file.Seek(index + int64(end), 0)
 		index += int64(end)
@@ -529,7 +541,10 @@ func main() {
 					for _, file := range args {
 						file := openFile(file)
 						defer file.Close()
-						text = append(text, divideFile(file, 1)[0].buff...)
+						defaultSize, multiple = helpFileReading(file, 1)
+						for iter := 0; iter < multiple; iter++ {
+							text = append(text, divideFile(file, 1, defaultSize, multiple)[0].buff...)
+						}
 					}
 					input := bytes.NewReader(text)
 					oneThreadConfig := &interp.Config{
@@ -577,7 +592,10 @@ func main() {
 		for _, file := range args {
 			file := openFile(file)
 			defer file.Close()
-			text = append(text, divideFile(file, 1)[0].buff...)
+			defaultSize, multiple = helpFileReading(file, 1)
+			for iter := 0; iter < multiple; iter++ {
+				text = append(text, divideFile(file, 1, defaultSize, multiple)[0].buff...)
+			}
 		}
 
 		input := bytes.NewReader(text)
@@ -620,7 +638,10 @@ func main() {
 		for _, file := range args {
 			file := openFile(file)
 			defer file.Close()
-			text = append(text, divideFile(file, 1)[0].buff...)
+			defaultSize, multiple = helpFileReading(file, 1)
+			for iter := 0; iter < multiple; iter++ {
+				text = append(text, divideFile(file, 1, defaultSize, multiple)[0].buff...)
+			}
 		}
 		input := bytes.NewReader(text)
 		oneThreadConfig := &interp.Config{
@@ -731,7 +752,10 @@ func main() {
 			for _, file := range args {
 				file := openFile(file)
 				defer file.Close()
-				text = append(text, divideFile(file, 1)[0].buff...)
+				defaultSize, multiple = helpFileReading(file, 1)
+				for iter := 0; iter < multiple; iter++ {
+					text = append(text, divideFile(file, 1, defaultSize, multiple)[0].buff...)
+				}
 			}
 			input := bytes.NewReader(text)
 			oneThreadConfig := &interp.Config{
@@ -804,7 +828,10 @@ func main() {
 		for _, file := range args {
 			file := openFile(file)
 			defer file.Close()
-			chunks := divideFile(file, numberOfThreads)
+			defaultSize, multiple = helpFileReading(file, numberOfThreads)
+			fmt.Println(multiple)
+			for iter := 0; iter < multiple; iter++ {
+				chunks := divideFile(file, numberOfThreads, defaultSize, multiple)
 			// for _, c := range chunks {
 			// 	fmt.Println("BEGIN")
 			// 	fmt.Println(string(c.buff))
@@ -814,7 +841,6 @@ func main() {
 				go func(chunks []chunk, i int, r chan<- *received) {
 					chunk := chunks[i]
 					res, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs, i)
-					// fmt.Println(res)
 					got := &received{results: res, functionNames: names, associativeArray: arrays}
 					r <- got
 				}(chunks, i, channel)
@@ -825,6 +851,7 @@ func main() {
 			arraysPerFile[l] = array
 			array = make([]*received, numberOfThreads)
 			l += 1
+			}
 		}
 
 		// Performs the suitable Reduction
@@ -888,14 +915,13 @@ func main() {
 					for i := 0; i < len(variable); i++ {
 						match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
 						if match {
+							fmt.Println("!!")
 							for _, ar := range array {
 								for k := range ar.associativeArray {
 									associativeValue[k] += ar.associativeArray[k]
 									// associativeValues[variable[i]][k] += ar.associativeArray[k]
 								}
 							}
-							variable[i] = variable[i][:strings.Index(variable[i], "[")]
-							associativeValues[variable[i]] = associativeValue
 						} else {
 							if mapOfVariables[variable[i]] == float64(0) {
 								for _, ar := range array {
@@ -907,6 +933,14 @@ func main() {
 						}
 					}
 				}
+			}
+		}
+
+		for i := 0; i < len(variable); i++ {
+			match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
+			if match {
+				variable[i] = variable[i][:strings.Index(variable[i], "[")]
+				associativeValues[variable[i]] = associativeValue
 			}
 		}
 
