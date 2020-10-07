@@ -829,7 +829,6 @@ func main() {
 			file := openFile(file)
 			defer file.Close()
 			defaultSize, multiple = helpFileReading(file, numberOfThreads)
-			fmt.Println(multiple)
 			for iter := 0; iter < multiple; iter++ {
 				chunks := divideFile(file, numberOfThreads, defaultSize, multiple)
 			// for _, c := range chunks {
@@ -915,7 +914,6 @@ func main() {
 					for i := 0; i < len(variable); i++ {
 						match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
 						if match {
-							fmt.Println("!!")
 							for _, ar := range array {
 								for k := range ar.associativeArray {
 									associativeValue[k] += ar.associativeArray[k]
