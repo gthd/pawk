@@ -231,6 +231,7 @@ func divideFile(file *os.File, n int, defaultSize int, multiple int) []chunk {
 				break
 			}
 		}
+		// fmt.Println(end-bytesToRead)
 
 		if thread > 0 {
 			//For all threads other than the first, start from position 1 to exclude \n at the beginning of each chunk

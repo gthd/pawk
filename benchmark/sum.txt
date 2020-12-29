@@ -1,1 +1,1 @@
-$2 * $3 > 5 {emp = emp + 1; re = re + 2} END {if (re < 100000) print emp}
+$2 * $3 > 5 {emp = emp + 1; re = re + 2} END {print emp, re}
