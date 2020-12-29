@@ -19,9 +19,9 @@ import "C"
 
 import (
 	// "time"
-	"io"
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -89,10 +89,10 @@ var (
 	printText            string
 	operations           []bool
 	// toRemove []string
-	numOfArgs int
+	numOfArgs   int
 	subFileSize int
 	defaultSize int
-	multiple int
+	multiple    int
 )
 
 type received struct {
@@ -196,10 +196,10 @@ func returnBeginPrintIndices(statement string) ([]int, []int) {
 
 func helpFileReading(file *os.File, numberOfThreads int) (int, int) {
 	memory := int(C.sysconf(C._SC_PHYS_PAGES)*C.sysconf(C._SC_PAGE_SIZE)) - 2500000000
-	subFileSize = int(memory/numberOfThreads)
-	for true {
-		multiple += 1
-		defaultSize = int(getSize(file) / (numberOfThreads*multiple))
+	subFileSize = int(memory / numberOfThreads)
+	for {
+		multiple ++
+		defaultSize = int(getSize(file) / (numberOfThreads * multiple))
 		if defaultSize < subFileSize {
 			break
 		}
@@ -241,7 +241,7 @@ func divideFile(file *os.File, n int, defaultSize int, multiple int) []chunk {
 		} else if thread == 0 {
 			chunk[thread].buff = b[1:end]
 		}
-		_, err := file.Seek(index + int64(end), 0)
+		_, err := file.Seek(index+int64(end), 0)
 		index += int64(end)
 		check(err)
 	}
@@ -499,7 +499,7 @@ func main() {
 	}
 
 	indexes = append(indexes, len([]byte(eventualAwkCommand)))
-	for i, _ := range indexes {
+	for i := range indexes {
 		if i == 0 {
 			actionString = string([]byte(eventualAwkCommand)[:indexes[i]])
 			actionString = strings.TrimPrefix(actionString, "\n")
@@ -532,7 +532,7 @@ func main() {
 
 	// Checks if an action statement contains an empty if operator, should be executed in one thread
 	for k := range actions {
-		if strings.Index(actions[k], "{") != -1 && strings.Index(actions[k], "}") != -1 {
+		if strings.Contains(actions[k], "{") && strings.Contains(actions[k], "}")  {
 			actStatement := actions[k][strings.Index(actions[k], "{")+1 : strings.Index(actions[k], "}")]
 			if strings.Contains(actStatement, "if") {
 				if len(strings.TrimSpace(actStatement[strings.Index(actStatement, ")")+1:])) == 0 {
@@ -832,25 +832,25 @@ func main() {
 			defaultSize, multiple = helpFileReading(file, numberOfThreads)
 			for iter := 0; iter < multiple; iter++ {
 				chunks := divideFile(file, numberOfThreads, defaultSize, multiple)
-			// for _, c := range chunks {
-			// 	fmt.Println("BEGIN")
-			// 	fmt.Println(string(c.buff))
-			// 	fmt.Println("END")
-			// }
-			for i := 0; i < numberOfThreads; i++ {
-				go func(chunks []chunk, i int, r chan<- *received) {
-					chunk := chunks[i]
-					res, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs, i)
-					got := &received{results: res, functionNames: names, associativeArray: arrays}
-					r <- got
-				}(chunks, i, channel)
-			}
-			for i := 0; i < numberOfThreads; i++ {
-				array[i] = <-channel
-			}
-			arraysPerFile[l] = array
-			array = make([]*received, numberOfThreads)
-			l += 1
+				// for _, c := range chunks {
+				// 	fmt.Println("BEGIN")
+				// 	fmt.Println(string(c.buff))
+				// 	fmt.Println("END")
+				// }
+				for i := 0; i < numberOfThreads; i++ {
+					go func(chunks []chunk, i int, r chan<- *received) {
+						chunk := chunks[i]
+						res, names, arrays := goAwk(chunk.buff, prog, fieldSeparator, offsetFieldSeparator, funcs, i)
+						got := &received{results: res, functionNames: names, associativeArray: arrays}
+						r <- got
+					}(chunks, i, channel)
+				}
+				for i := 0; i < numberOfThreads; i++ {
+					array[i] = <-channel
+				}
+				arraysPerFile[l] = array
+				array = make([]*received, numberOfThreads)
+				l ++
 			}
 		}
 
@@ -896,10 +896,11 @@ func main() {
 					}
 				} else {
 					numOfArgs = len(variable)
+					r, _ := regexp.Compile("\\[[^\\]]*\\]")
 					for _, v := range variable {
-						isMatch, _ := regexp.MatchString("\\[[^\\]]*\\]", v)
+						isMatch := r.MatchString(v)
 						if isMatch {
-							numOfArgs += 1
+							numOfArgs ++
 						}
 					}
 					if numOfArgs != len(operations) {
@@ -912,8 +913,9 @@ func main() {
 				if len(array[0].associativeArray) > 0 {
 					associativeValue = make(map[string]float64)
 					associativeValues = make(map[string]map[string]float64)
+					r, _ := regexp.Compile("\\[[^\\]]*\\]")
 					for i := 0; i < len(variable); i++ {
-						match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
+						match := r.MatchString(variable[i])
 						if match {
 							for _, ar := range array {
 								for k := range ar.associativeArray {
@@ -935,8 +937,9 @@ func main() {
 			}
 		}
 
+		r, _ := regexp.Compile("\\[[^\\]]*\\]")
 		for i := 0; i < len(variable); i++ {
-			match, _ := regexp.MatchString("\\[[^\\]]*\\]", variable[i])
+			match := r.MatchString(variable[i])
 			if match {
 				variable[i] = variable[i][:strings.Index(variable[i], "[")]
 				associativeValues[variable[i]] = associativeValue
