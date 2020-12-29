@@ -198,7 +198,7 @@ func helpFileReading(file *os.File, numberOfThreads int) (int, int) {
 	memory := int(C.sysconf(C._SC_PHYS_PAGES)*C.sysconf(C._SC_PAGE_SIZE)) - 2500000000
 	subFileSize = int(memory / numberOfThreads)
 	for {
-		multiple ++
+		multiple++
 		defaultSize = int(getSize(file) / (numberOfThreads * multiple))
 		if defaultSize < subFileSize {
 			break
@@ -532,7 +532,7 @@ func main() {
 
 	// Checks if an action statement contains an empty if operator, should be executed in one thread
 	for k := range actions {
-		if strings.Contains(actions[k], "{") && strings.Contains(actions[k], "}")  {
+		if strings.Contains(actions[k], "{") && strings.Contains(actions[k], "}") {
 			actStatement := actions[k][strings.Index(actions[k], "{")+1 : strings.Index(actions[k], "}")]
 			if strings.Contains(actStatement, "if") {
 				if len(strings.TrimSpace(actStatement[strings.Index(actStatement, ")")+1:])) == 0 {
@@ -850,7 +850,7 @@ func main() {
 				}
 				arraysPerFile[l] = array
 				array = make([]*received, numberOfThreads)
-				l ++
+				l++
 			}
 		}
 
@@ -900,7 +900,7 @@ func main() {
 					for _, v := range variable {
 						isMatch := r.MatchString(v)
 						if isMatch {
-							numOfArgs ++
+							numOfArgs++
 						}
 					}
 					if numOfArgs != len(operations) {
