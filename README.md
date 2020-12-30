@@ -2,15 +2,7 @@
 [![Build Status](https://travis-ci.com/gthd/pawk.svg?branch=dev)](https://travis-ci.com/gthd/pawk?branch=dev)
 
 # PAWK
-Pawk is an AWK-like language that has been designed to speed up the execution of
-all the parallelizable AWK commands by following a map-reduce architecture. More
-specifically, Pawk first splits the input text file into multiple chunks and then
-processes each chunk on a different thread. Finally, it combines the results from
-the different threads with a suitable reduce operation.
-
-GO was chosen as the language of implementation since it offers great support
-for multi-threading, through the use of go-routines. It has to be noted here,
-that there is a selected number of AWK operations that can be run in parallel.
+Pawk is a reimplementation of the awk pattern-directed scan-ning and processing language that allows awk programs to process input files concurrently on multi-core processors. Its design is based on the insight that an awk program’s predicates are typically stateless, while the corresponding actions can often be combined following the split-apply-combine-strategy for data analysis, as popularized by the MapReduce programming model. Specifically, the input file is split into chunks, which are processed through a dialect of awk that can be executed in parallel without conflicts. Output from record-processing predicates is serialized, while the END pseudo-predicate reduces the data stored by the parallel tasks into the result of an equivalent sequential process. Programs that are not thus parallelizable are run sequentially. pawk is implemented in GO, by extending the existing GoAwk interpreter through a shared memory model with threads. An empirical evaluation of 20 existing awk programs showed that 9 are paralellizable. Measurements show that on large data sets the parallelized programs achieved on average a 20% speedup per core.
 
 ## Getting Started
 
@@ -29,9 +21,12 @@ that there is a selected number of AWK operations that can be run in parallel.
     go get github.com/gthd/helper
     ```  
 
-## Demo
+## Benchmarks
 
-The first line works under linux_amd64 and the second line under windows_amd64.
+After having installed pawk and its dependencies, to execute the benchmarking script you need to adjust the paths to your system, define a file where the script will write its output and finally define the file that the command will run on. To generate a file with random data, for testing purposes, you can run the text_files/filegen.py script.
+
+
+## Demo
 
 The invocation compatibility of Pawk was inspired by GNU Awk and it is as following:
 
@@ -39,9 +34,11 @@ The invocation compatibility of Pawk was inspired by GNU Awk and it is as follow
     ./pawk [-n N] [-d[n]] [-F fs] [-v var=value] [prog | -f progfile] [file ...]
     ```  
 
+where -n is the flag for the number of cores to use, -d is the flag for the file to print the global variables, -F is the flag for the field separator and -v is the flag for initialising the variables in the command.
+
 The difference with Gawk is with respect to the use of the -d option. In GAWK if a file name is not provided then the global variables are written by default to awkvars.out in the current directory. In Pawk if a file name is not provided to the -d option then there is no file written by default.
 
-## Details
+## Usage Details
 
 1. When wanting to print a series of variables then they must be separated in this way:
 
@@ -78,8 +75,6 @@ The difference with Gawk is with respect to the use of the -d option. In GAWK if
 7. Local variables are not allowed
 
 8. Dump File is written in the sub-directory text_files/
-
-9. Currently only accumulation is supported
 
 ## Contributing
 
