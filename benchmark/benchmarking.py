@@ -68,9 +68,6 @@ class Benchmark:
 benchmark1 = Benchmark()
 benchmark1.main()
 
-benchmark2 = Benchmark(version='awk')
-benchmark2.main()
-
 benchmark3 = Benchmark(version='gawk')
 benchmark3.main()
 
@@ -79,9 +76,6 @@ benchmark7.main()
 
 benchmark4 = Benchmark(fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/bigdata.txt')
 benchmark4.main()
-
-benchmark5 = Benchmark(fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/bigdata.txt', version='awk')
-benchmark5.main()
 
 benchmark6 = Benchmark(fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/bigdata.txt', version='gawk')
 benchmark6.main()
