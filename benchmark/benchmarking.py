@@ -4,26 +4,26 @@ import subprocess, resource, os
 
 class Benchmark:
 
-    def __init__(self, numberOfThreads=8, fileToWrite='/home/george/Desktop/Github/pawk/results.txt', version='/home/george/Desktop/Github/pawk/./pawk', fileToRead='/home/george/Desktop/Github/pawk/text_files/testdata.txt'):
+    def __init__(self, numberOfThreads=8, fileToWrite='/home/gtheodorou/work/Github/pawk/results.txt', version='/home/gtheodorou/work/Github/pawk/./pawk', fileToRead='/home/gtheodorou/work/Github/pawk/text_files/data.txt'):
         self.numberOfThreads = numberOfThreads
         self.file = fileToWrite
         self.version = version
         self.fileToRead = fileToRead
 
     def createFile(self):
-        if os.path.exists(self.file) and self.version == '/home/george/Desktop/Github/pawk/./pawk':
+        if os.path.exists(self.file) and self.version == '/home/gtheodorou/work/Github/pawk/./pawk':
             os.remove(self.file)
             return open(self.file, 'a')
         else:
             return open(self.file, 'a')
 
     def getFiles(self):
-        onlyfiles = ['tt.03', 'tt.03a', 'tt.06', 'stats.txt', 'sum.txt', 'minmax.txt']
+        onlyfiles = ['tt.03', 'tt.03a', 'tt.04', 'tt.05',  'tt.06', 'stats.txt', 'sum.txt', 'minmax.txt']
         return onlyfiles
 
     def formCommand(self, awkFiles):
         commands = []
-        if self.version == '/home/george/Desktop/Github/pawk/./pawk':
+        if self.version == '/home/gtheodorou/work/Github/pawk/./pawk':
             for thread in range(1, self.numberOfThreads+1):
                 command = [self.version, "-n", str(thread), "-f"]
                 for benchmarkCommand in awkFiles:
@@ -59,7 +59,7 @@ class Benchmark:
         resultsFile = self.createFile()
         for command in commands:
             cpu_time = self.executeCommand(command)
-            if self.version == '/home/george/Desktop/Github/pawk/./pawk':
+            if self.version == '/home/gtheodorou/work/Github/pawk/./pawk':
                 self.noteTimes(cpu_time, command[4], command[2], resultsFile)
             else:
                 self.noteOthersTimes(cpu_time, command[2], resultsFile)
@@ -68,17 +68,17 @@ class Benchmark:
 benchmark1 = Benchmark()
 benchmark1.main()
 
-benchmark3 = Benchmark(version='gawk')
+benchmark2 = Benchmark(version='gawk')
+benchmark2.main()
+
+benchmark3 = Benchmark(version='/home/gtheodorou/work/bin/./goawk')
 benchmark3.main()
 
-benchmark7 = Benchmark(version='/home/george/go/bin/./goawk')
-benchmark7.main()
-
-benchmark4 = Benchmark(fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/bigdata.txt')
+benchmark4 = Benchmark(fileToWrite='/home/gtheodorou/work/Github/pawk/results2.txt', fileToRead='/home/gtheodorou/work/Github/pawk/text_files/bigdata.txt')
 benchmark4.main()
 
-benchmark6 = Benchmark(fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/bigdata.txt', version='gawk')
-benchmark6.main()
+benchmark5 = Benchmark(fileToWrite='/home/gtheodorou/work/Github/pawk/results2.txt', fileToRead='/home/gtheodorou/work/Github/pawk/text_files/bigdata.txt', version='gawk')
+benchmark5.main()
 
-benchmark8 = Benchmark(version='/home/george/go/bin/./goawk', fileToWrite='/home/george/Desktop/Github/pawk/results2.txt', fileToRead='/home/george/Desktop/Github/pawk/text_files/bigdata.txt')
-benchmark8.main()
+benchmark6 = Benchmark(version='/home/gtheodorou/work/bin/./goawk', fileToWrite='/home/gtheodorou/work/Github/pawk/results2.txt', fileToRead='/home/gtheodorou/work/Github/pawk/text_files/bigdata.txt')
+benchmark6.main()

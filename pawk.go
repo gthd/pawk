@@ -806,8 +806,8 @@ func main() {
 	if len(prog.Actions) > 0 {
 		// Goroutines usage for allowing paralle processing.
 		numCores = getNumCores()
-		fmt.Println(numCores)
-		// numCores = 8
+		fmt.Println("Number of cores is:", numCores)
+		numCores = 8
 		if numberOfThreads > numCores {
 			fmt.Println("Number of threads surpasses available CPU cores. Reverting to " + strconv.Itoa(numCores) + " threads. (Equal to the maximum number of CPU cores)")
 			numberOfThreads = numCores
