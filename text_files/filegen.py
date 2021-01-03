@@ -20,8 +20,8 @@ class FileGenerator:
         for i in range(200):
             randomDigits.append(self.genRandomDigits())
 
-        for i in range(250):
-            with open('dummydata.txt', 'a') as the_file:
+        for i in range(10000000):
+            with open('dummydata2.txt', 'a') as the_file:
                 charIndex = random.randint(0,9)
                 digfirstIndex = random.randint(0,199)
                 digsecondIndex = random.randint(0,199)
