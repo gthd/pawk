@@ -1006,13 +1006,12 @@ func main() {
 		})
 		check(myErr)
 
-		// for _, file := range files {
-		// 	fmt.Println("KKKK")
-		// 	content, myErr2 := ioutil.ReadFile(file)
-		// 	check(myErr2)
-		// 	printText = string(content)
-		// 	fmt.Println(printText)
-		// }
+		for _, file := range files {
+			content, myErr2 := ioutil.ReadFile(file)
+			check(myErr2)
+			printText = string(content)
+			fmt.Println(printText)
+		}
 
 		_, err, _ = interp.ExecOneThread(end, configEnd, associativeArrays)
 		check(err)
